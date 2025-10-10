@@ -21,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Trackit.Core\Trackit.Core.csproj" />
+    <ProjectReference Include="..\Trackit.Data\Trackit.Data.csproj" />
   </ItemGroup>
 
 </Project>
