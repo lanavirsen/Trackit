@@ -1,6 +1,6 @@
 ﻿namespace Trackit.Core.Domain
 {
-    public sealed class WorkOrder
+    public sealed record WorkOrder
     {
         public int Id { get; init; }
         public int CreatorUserId { get; init; }
