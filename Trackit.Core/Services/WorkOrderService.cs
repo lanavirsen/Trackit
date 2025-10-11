@@ -21,9 +21,9 @@ namespace Trackit.Core.Services
         {
             var now = _nowUtc();
             var delta = dueAtUtc - now;
-            if (delta <= TimeSpan.Zero) return Priority.High;
-            if (delta <= TimeSpan.FromHours(24)) return Priority.High;
-            if (delta <= TimeSpan.FromHours(72)) return Priority.Medium;
+            if (delta < TimeSpan.Zero) return Priority.High;
+            if (delta < TimeSpan.FromHours(24)) return Priority.High;
+            if (delta < TimeSpan.FromHours(72)) return Priority.Medium;
             return Priority.Low;
         }
 
