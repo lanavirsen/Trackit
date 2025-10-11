@@ -93,7 +93,8 @@ namespace Trackit.Cli.Ui
 
             var summary = AnsiConsole.Ask<string>("Summary:");
             var details = AnsiConsole.Prompt(new TextPrompt<string>("Details (optional):").AllowEmpty());
-            var dueStr = AnsiConsole.Prompt(new TextPrompt<string>("Due (UTC ISO 8601, e.g. 2025-10-12T18:00:00Z):")
+            var dueStr = AnsiConsole.Prompt(
+                new TextPrompt<string>("Due date/time [grey](must be UTC, e.g. 2025-10-12T18:00:00Z)[/]:")
                 .Validate(s => DateTimeOffset.TryParse(s, out _) ? ValidationResult.Success()
                             : ValidationResult.Error("[red]Invalid date-time[/]")));
             var due = DateTimeOffset.Parse(dueStr, null, System.Globalization.DateTimeStyles.RoundtripKind);
@@ -153,22 +154,41 @@ namespace Trackit.Cli.Ui
             if (items.Count == 0)
                 AnsiConsole.MarkupLine("[grey]No open work orders.[/]");
             else
+            {
+                AnsiConsole.MarkupLine($"[bold underline]Open work orders ({items.Count})[/]");
                 AnsiConsole.Write(table);
+            }
+                
         }
 
         // Close an existing work order by prompting for its ID.
         private async Task CloseWorkOrderAsync()
         {
             // Ensure the user is logged in.
-            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return; }
-            var id = AnsiConsole.Prompt(new TextPrompt<int>("Work order Id to close:")
-                .Validate(v => v > 0 ? ValidationResult.Success() : ValidationResult.Error("[red]Id must be > 0[/]")));
+            if (_currentUserId is null)
+            {
+                AnsiConsole.MarkupLine("[red]Login first.[/]");
+                return;
+            }
+
+            // Prompt for the work order ID to close and validate input.
+            var id = AnsiConsole.Prompt(
+                new TextPrompt<int>("Work order Id to close:")
+                    .Validate(v => v > 0 ? ValidationResult.Success() :
+                        ValidationResult.Error("[red]Id must be > 0[/]")));
+
+            var confirm = AnsiConsole.Confirm($"Are you sure you want to close work order [yellow]{id}[/]?");
+            if (!confirm)
+            {
+                AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                return;
+            }
 
             // Attempt to close the work order and handle any errors.
             try
             {
                 await _work.CloseAsync(id, _currentUserId.Value, CloseReason.Resolved);
-                AnsiConsole.MarkupLine("[green]Closed.[/]");
+                AnsiConsole.MarkupLine("[green]Work order closed.[/]");
             }
             catch (Exception ex)
             {
