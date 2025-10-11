@@ -1,11 +1,18 @@
 ﻿using Trackit.Core.Auth;
 using Trackit.Core.Services;
 using Trackit.Data.Repositories;
+using Trackit.Data.Sqlite;
 
-Console.WriteLine("Trackit – temporary manual CLI");
-Console.WriteLine("===============================");
+Console.WriteLine("Trackit – temporary manual CLI (SQLite)");
+Console.WriteLine("=======================================");
 
-var userRepo = new InMemoryUserRepository();
+var dbPath = Path.Combine(Environment.CurrentDirectory, "trackit.db");
+var connStr = $"Data Source={dbPath};Cache=Shared;";
+
+var factory = new DapperConnectionFactory(connStr);
+await DbBootstrap.EnsureCreatedAsync(factory);
+
+var userRepo = new SqliteUserRepository(factory);
 var hasher = new PasswordHasher();
 var userSvc = new UserService(userRepo, hasher);
 
