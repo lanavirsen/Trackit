@@ -11,6 +11,7 @@
 
   <ItemGroup>
 	<EmbeddedResource Include="Migrations\001_init.sql" />
+    <EmbeddedResource Include="Migrations\002_workorders.sql" />
   </ItemGroup>
 
   <PropertyGroup>
