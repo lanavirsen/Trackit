@@ -1,0 +1,72 @@
+﻿using Trackit.Core.Domain;
+using Trackit.Core.Ports;
+
+namespace Trackit.Core.Services
+{
+    // Service class encapsulating business logic for managing work orders.
+    public sealed class WorkOrderService
+    {
+        private readonly IWorkOrderRepository _repo;
+        private readonly Func<DateTimeOffset> _nowUtc;
+
+        // Constructor accepting a repository and an optional function to get the current UTC time.
+        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null)
+        {
+            _repo = repo;
+            _nowUtc = nowUtc ?? (() => DateTimeOffset.UtcNow);
+        }
+
+        // Suggests a priority level based on the due date.
+        public Priority SuggestPriority(DateTimeOffset dueAtUtc)
+        {
+            var now = _nowUtc();
+            var delta = dueAtUtc - now;
+            if (delta <= TimeSpan.Zero) return Priority.High;
+            if (delta <= TimeSpan.FromHours(24)) return Priority.High;
+            if (delta <= TimeSpan.FromHours(72)) return Priority.Medium;
+            return Priority.Low;
+        }
+
+        // Adds a new work order and returns the generated database ID.
+        public async Task<int> AddAsync(int creatorUserId, string summary, string? details, DateTimeOffset dueAtUtc, Priority? priority = null, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(summary)) throw new ArgumentException("Summary required", nameof(summary));
+            var now = _nowUtc();
+            var wo = new WorkOrder
+            {
+                CreatorUserId = creatorUserId,
+                Summary = summary.Trim(),
+                Details = string.IsNullOrWhiteSpace(details) ? null : details.Trim(),
+                DueAtUtc = dueAtUtc.ToUniversalTime(),
+                Priority = priority ?? SuggestPriority(dueAtUtc),
+                Closed = false,
+                ClosedAtUtc = null,
+                ClosedReason = null,
+                CreatedAtUtc = now,
+                UpdatedAtUtc = now
+            };
+            return await _repo.AddAsync(wo, ct);
+        }
+
+        // Retrieves a work order by its ID.
+        public Task<IReadOnlyList<WorkOrder>> ListOpenAsync(int creatorUserId, CancellationToken ct = default)
+            => _repo.ListOpenAsync(creatorUserId, ct);
+
+        public async Task CloseAsync(int id, int actorUserId, CloseReason reason, CancellationToken ct = default)
+        {
+            var existing = await _repo.GetAsync(id, ct) ?? throw new InvalidOperationException("Work order not found");
+            if (existing.CreatorUserId != actorUserId) throw new InvalidOperationException("Not owner");
+            if (existing.Closed) throw new InvalidOperationException("Already closed");
+
+            var now = _nowUtc();
+            var updated = existing with
+            {
+                Closed = true,
+                ClosedAtUtc = now,
+                ClosedReason = reason,
+                UpdatedAtUtc = now
+            };
+            await _repo.UpdateAsync(updated, ct);
+        }
+    }
+}
