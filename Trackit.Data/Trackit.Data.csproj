@@ -9,6 +9,12 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.9" />
   </ItemGroup>
 
+  <ItemGroup>
+	<None Include="Migrations\001_init.sql">
+	  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	</None>
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
