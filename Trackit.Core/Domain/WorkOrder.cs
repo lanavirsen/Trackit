@@ -8,6 +8,7 @@
         public string? Details { get; init; }
         public DateTimeOffset DueAtUtc { get; init; }
         public Priority Priority { get; init; }
+        public Stage Stage { get; init; }
         public bool Closed { get; init; }
         public DateTimeOffset? ClosedAtUtc { get; init; }
         public CloseReason? ClosedReason { get; init; }
