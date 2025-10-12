@@ -19,7 +19,8 @@ namespace Trackit.Data.Sqlite
             foreach (var resourceName in new[]
             {
                 "Trackit.Data.Migrations.001_init.sql",
-                "Trackit.Data.Migrations.002_workorders.sql"
+                "Trackit.Data.Migrations.002_workorders.sql",
+                "Trackit.Data.Migrations.003_stage.sql"
             })
             {
                 // Load the embedded SQL script from the assembly's resources.
