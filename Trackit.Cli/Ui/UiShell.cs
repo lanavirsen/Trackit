@@ -1,6 +1,7 @@
 using Spectre.Console;
 using Trackit.Core.Services;
 using Trackit.Core.Domain;
+using System.IO;
 
 namespace Trackit.Cli.Ui
 {
@@ -146,6 +147,15 @@ namespace Trackit.Cli.Ui
             AnsiConsole.MarkupLine("[green]Work order created.[/]");
         }
 
+        private static string FormatRelative(TimeSpan span)
+        {
+            if (span.TotalDays >= 1)
+                return $"{(int)span.TotalDays}d {(int)(span.Hours)}h";
+            if (span.TotalHours >= 1)
+                return $"{(int)span.TotalHours}h {(int)span.Minutes}m";
+            return $"{(int)span.TotalMinutes}m";
+        }
+
         // List all open work orders for the current user.
         private async Task ListOpenAsync()
         {
@@ -158,25 +168,37 @@ namespace Trackit.Cli.Ui
             table.AddColumn("Summary");
             table.AddColumn("Due (local)");
             table.AddColumn("Priority");
-            table.AddColumn("Status");
+            table.AddColumn("Stage");
 
             // Populate the table with work order details.
             foreach (var w in items)
             {
-                var dueSoon = IsDueSoon(w.DueAtUtc);
+                var now = DateTimeOffset.Now;
+                var localDue = w.DueAtUtc.ToLocalTime();
+                var remaining = localDue - now;
+
+                string rel;
+                if (remaining.TotalMinutes < 0)
+                    rel = $"[red]{FormatRelative(-remaining)} ago[/]";
+                else
+                    rel = $"{FormatRelative(remaining)}";
+
                 var prioText = w.Priority switch
                 {
                     Priority.High => "[red]High[/]",
                     Priority.Medium => "[yellow]Medium[/]",
                     _ => "[green]Low[/]"
                 };
-                var status = dueSoon ? "[bold red]Due soon[/]" : "OK";
+
+                var dueDisplay = $"{rel} ({localDue:yyyy-MM-dd HH:mm})";
+
                 table.AddRow(
                     w.Id.ToString(),
                     Escape(w.Summary),
-                    w.DueAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    dueDisplay,
                     prioText,
-                    status);
+                    "[grey]—[/]"  // placeholder until Stage column logic is added
+                );
             }
 
             // Display the table or a message if there are no open work orders.

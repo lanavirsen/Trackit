@@ -10,14 +10,18 @@ namespace Trackit.Cli
     {
         public static async Task Main()
         {
-            // Database setup
-            var dbPath = Path.Combine(Environment.CurrentDirectory, "trackit.db");
+            // Database setup (stable per-user path)
+            var dataRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Trackit");
+            Directory.CreateDirectory(dataRoot);
+            var dbPath = Path.Combine(dataRoot, "trackit.db");
             var connStr = $"Data Source={dbPath};Cache=Shared;";
+            Console.WriteLine($"Database: {dbPath}");
 
             var factory = new DapperConnectionFactory(connStr);
             await DbBootstrap.EnsureCreatedAsync(factory);
 
-            // Core services
             var userRepo = new SqliteUserRepository(factory);
             var workRepo = new SqliteWorkOrderRepository(factory);
 
@@ -25,7 +29,6 @@ namespace Trackit.Cli
             var userSvc = new UserService(userRepo, hasher);
             var workSvc = new WorkOrderService(workRepo);
 
-            // UI
             var ui = new UiShell(userSvc, workSvc);
             await ui.RunAsync();
         }
