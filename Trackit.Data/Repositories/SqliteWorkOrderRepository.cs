@@ -18,8 +18,8 @@ namespace Trackit.Data.Repositories
         public async Task<int> AddAsync(WorkOrder wo, CancellationToken ct = default)
         {
             const string sql = @"
-INSERT INTO WorkOrders (CreatorUserId, Summary, Details, DueAtUtc, Priority, Closed, ClosedAtUtc, ClosedReason, CreatedAtUtc, UpdatedAtUtc)
-VALUES (@CreatorUserId, @Summary, @Details, @DueAtUtc, @Priority, @Closed, @ClosedAtUtc, @ClosedReason, @CreatedAtUtc, @UpdatedAtUtc);
+INSERT INTO WorkOrders (CreatorUserId, Summary, Details, DueAtUtc, Priority, Stage, Closed, ClosedAtUtc, ClosedReason, CreatedAtUtc, UpdatedAtUtc)
+VALUES (@CreatorUserId, @Summary, @Details, @DueAtUtc, @Priority, @Stage, @Closed, @ClosedAtUtc, @ClosedReason, @CreatedAtUtc, @UpdatedAtUtc);
 SELECT last_insert_rowid();";
             using var conn = _factory.Create();
             var id = await conn.ExecuteScalarAsync<long>(sql, ToRow(wo));
@@ -57,6 +57,7 @@ SELECT last_insert_rowid();";
                              Details=@Details,
                              DueAtUtc=@DueAtUtc,
                              Priority=@Priority,
+                             Stage=@Stage,
                              Closed=@Closed,
                              ClosedAtUtc=@ClosedAtUtc,
                              ClosedReason=@ClosedReason,
@@ -77,6 +78,7 @@ SELECT last_insert_rowid();";
             wo.Details,
             DueAtUtc = wo.DueAtUtc.UtcDateTime.ToString("O"),
             Priority = (int)wo.Priority,
+            Stage = (int)wo.Stage,
             Closed = wo.Closed ? 1 : 0,
             ClosedAtUtc = wo.ClosedAtUtc?.UtcDateTime.ToString("O"),
             ClosedReason = wo.ClosedReason.HasValue ? (int)wo.ClosedReason.Value : (int?)null,
@@ -93,6 +95,7 @@ SELECT last_insert_rowid();";
             public string? Details { get; init; }
             public string DueAtUtc { get; init; } = null!;
             public int Priority { get; init; }
+            public int Stage { get; init; }
             public int Closed { get; init; }
             public string? ClosedAtUtc { get; init; }
             public int? ClosedReason { get; init; }
@@ -108,6 +111,7 @@ SELECT last_insert_rowid();";
                 Details = Details,
                 DueAtUtc = DateTimeOffset.Parse(DueAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
                 Priority = (Priority)Priority,
+                Stage = (Stage)Stage,
                 Closed = Closed != 0,
                 ClosedAtUtc = ClosedAtUtc is null ? null :
                     DateTimeOffset.Parse(ClosedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
