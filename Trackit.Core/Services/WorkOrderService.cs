@@ -39,6 +39,7 @@ namespace Trackit.Core.Services
                 Details = string.IsNullOrWhiteSpace(details) ? null : details.Trim(),
                 DueAtUtc = dueAtUtc.ToUniversalTime(),
                 Priority = priority ?? SuggestPriority(dueAtUtc),
+                Stage = Stage.Open,
                 Closed = false,
                 ClosedAtUtc = null,
                 ClosedReason = null,
@@ -61,9 +62,29 @@ namespace Trackit.Core.Services
             var now = _nowUtc();
             var updated = existing with
             {
+                Stage = Stage.Closed,
                 Closed = true,
                 ClosedAtUtc = now,
                 ClosedReason = reason,
+                UpdatedAtUtc = now
+            };
+            await _repo.UpdateAsync(updated, ct);
+        }
+
+        // Changes the stage of a work order.
+        public async Task ChangeStageAsync(int id, int actorUserId, Stage newStage, CancellationToken ct = default)
+        {
+            var existing = await _repo.GetAsync(id, ct) ?? throw new InvalidOperationException("Work order not found");
+            if (existing.CreatorUserId != actorUserId) throw new InvalidOperationException("Not owner");
+            if (existing.Closed && newStage != Stage.Closed) throw new InvalidOperationException("Closed items cannot move stages");
+
+            var now = _nowUtc();
+            var updated = existing with
+            {
+                Stage = newStage,
+                // keep Closed flags consistent
+                Closed = newStage == Stage.Closed || existing.Closed,
+                ClosedAtUtc = newStage == Stage.Closed && existing.ClosedAtUtc is null ? now : existing.ClosedAtUtc,
                 UpdatedAtUtc = now
             };
             await _repo.UpdateAsync(updated, ct);
