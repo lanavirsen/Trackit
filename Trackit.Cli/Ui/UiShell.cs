@@ -26,7 +26,7 @@ namespace Trackit.Cli.Ui
                 // Show different menu options based on whether a user is logged in.
                 var choices = _currentUserId is null
                     ? new[] { "Register", "Login", "Exit" }
-                    : new[] { "Add work order", "List open", "Close work order", "Logout" };
+                    : new[] { "Add work order", "List open", "Change stage", "Close work order", "Logout" };
 
                 // Prompt the user to choose an option.
                 var choice = AnsiConsole.Prompt(
@@ -41,6 +41,7 @@ namespace Trackit.Cli.Ui
                     case "Exit": return;
                     case "Add work order": await AddWorkOrderAsync(); break;
                     case "List open": await ListOpenAsync(); break;
+                    case "Change stage": await ChangeStageAsync(); break;
                     case "Close work order": await CloseWorkOrderAsync(); break;
                     case "Logout": _currentUserId = null; _currentUsername = null; break;
                 }
@@ -197,6 +198,7 @@ namespace Trackit.Cli.Ui
                     Escape(w.Summary),
                     dueDisplay,
                     prioText,
+                    StageText(w.Stage),
                     "[grey]—[/]"  // placeholder until Stage column logic is added
                 );
             }
@@ -211,6 +213,16 @@ namespace Trackit.Cli.Ui
             }
                 
         }
+
+        // Convert Stage enum to colored text for display.
+        private static string StageText(Stage s) => s switch
+        {
+            Stage.Open => "[cyan]Open[/]",
+            Stage.InProgress => "[yellow]In Progress[/]",
+            Stage.AwaitingParts => "[magenta]Awaiting Parts[/]",
+            Stage.Closed => "[grey]Closed[/]",
+            _ => s.ToString()
+        };
 
         // Close an existing work order by prompting for its ID.
         private async Task CloseWorkOrderAsync()
@@ -246,6 +258,42 @@ namespace Trackit.Cli.Ui
                 AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message}");
             }
         }
+
+        // Change the stage of an existing work order.
+        private async Task ChangeStageAsync()
+        {
+            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return; }
+
+            var id = AnsiConsole.Prompt(
+                new TextPrompt<int>("Work order Id:")
+                    .Validate(v => v > 0 ? ValidationResult.Success()
+                        : ValidationResult.Error("[red]Id must be > 0[/]")));
+
+            var newStageStr = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("Select new stage")
+                    .AddChoices("Open", "In Progress", "Awaiting Parts", "Closed"));
+
+            var newStage = newStageStr switch
+            {
+                "Open" => Stage.Open,
+                "In Progress" => Stage.InProgress,
+                "Awaiting Parts" => Stage.AwaitingParts,
+                "Closed" => Stage.Closed,
+                _ => Stage.Open
+            };
+
+            try
+            {
+                await _work.ChangeStageAsync(id, _currentUserId.Value, newStage);
+                AnsiConsole.MarkupLine("[green]Stage updated.[/]");
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Error:[/] {ex.Message}");
+            }
+        }
+
 
         // Validate password against policy: min 6 chars, at least 1 digit, 1 uppercase, 1 special char.
         private static bool PasswordPolicy(string p)
