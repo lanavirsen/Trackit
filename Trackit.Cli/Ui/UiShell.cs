@@ -178,11 +178,9 @@ namespace Trackit.Cli.Ui
                 var localDue = w.DueAtUtc.ToLocalTime();
                 var remaining = localDue - now;
 
-                string rel;
-                if (remaining.TotalMinutes < 0)
-                    rel = $"[red]{FormatRelative(-remaining)} ago[/]";
-                else
-                    rel = $"{FormatRelative(remaining)}";
+                string rel = remaining.TotalMinutes < 0
+                    ? $"[red]{FormatRelative(-remaining)} ago[/]"
+                    : $"{FormatRelative(remaining)}";
 
                 var prioText = w.Priority switch
                 {
@@ -198,8 +196,7 @@ namespace Trackit.Cli.Ui
                     Escape(w.Summary),
                     dueDisplay,
                     prioText,
-                    StageText(w.Stage),
-                    "[grey]—[/]"  // placeholder until Stage column logic is added
+                    StageText(w.Stage)
                 );
             }
 
