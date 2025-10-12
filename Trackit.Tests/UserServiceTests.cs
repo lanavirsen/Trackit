@@ -36,6 +36,15 @@ namespace Trackit.Tests
         }
 
         [Fact]
+        public async Task Whitespace_password_is_rejected()
+        {
+            var svc = NewSvc();
+            var act = async () => await svc.RegisterAsync("lana", null, "   ");
+            await act.Should().ThrowAsync<ArgumentException>()
+                .WithParameterName("password");
+        }
+
+        [Fact]
         public async Task Wrong_password_fails()
         {
             var svc = NewSvc();

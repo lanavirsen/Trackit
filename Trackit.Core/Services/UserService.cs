@@ -35,7 +35,7 @@ namespace Trackit.Core.Services
         public async Task<int> RegisterAsync(string username, string? email, string password, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username required", nameof(username));
-            if (string.IsNullOrEmpty(password)) throw new ArgumentException("Password required", nameof(password));
+            if (string.IsNullOrWhiteSpace(password)) throw new ArgumentException("Password required", nameof(password));
 
             var norm = Normalization.NormalizeUsername(username);
             if (await _repo.ExistsAsync(norm, ct))
