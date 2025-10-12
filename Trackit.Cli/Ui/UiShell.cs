@@ -93,13 +93,37 @@ namespace Trackit.Cli.Ui
 
             var summary = AnsiConsole.Ask<string>("Summary:");
             var details = AnsiConsole.Prompt(new TextPrompt<string>("Details (optional):").AllowEmpty());
-            var dueStr = AnsiConsole.Prompt(
-                new TextPrompt<string>("Due date/time [grey](must be UTC, e.g. 2025-10-12T18:00:00Z)[/]:")
-                .Validate(s => DateTimeOffset.TryParse(s, out _) ? ValidationResult.Success()
-                            : ValidationResult.Error("[red]Invalid date-time[/]")));
-            var due = DateTimeOffset.Parse(dueStr, null, System.Globalization.DateTimeStyles.RoundtripKind);
 
-            var suggested = _work.SuggestPriority(due);
+            var preset = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                .Title("Quick due date?")
+                .AddChoices("No preset", "Today 18:00", "Tomorrow 09:00", "+2h"));
+
+            DateTimeOffset dueUtc;
+
+            if (preset == "Today 18:00")
+            {
+                dueUtc = DateTimeOffset.Now.Date.AddHours(18).ToUniversalTime();
+            }
+            else if (preset == "Tomorrow 09:00")
+            {
+                dueUtc = DateTimeOffset.Now.Date.AddDays(1).AddHours(9).ToUniversalTime();
+            }
+            else if (preset == "+2h")
+            {
+                dueUtc = DateTimeOffset.UtcNow.AddHours(2);
+            }
+            else // No preset, ask manually
+            {
+                var input = AnsiConsole.Ask<string>($"Enter due date/time (local accepted). {DueParser.Hint}");
+                if (!DueParser.TryParseToUtc(input, out dueUtc))
+                {
+                    AnsiConsole.MarkupLine("[red]Invalid date/time, cancelled.[/]");
+                    return;
+                }
+            }
+
+            var suggested = _work.SuggestPriority(dueUtc);
             var chosen = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title($"Priority (suggested: [bold]{suggested}[/])")
@@ -117,7 +141,7 @@ namespace Trackit.Cli.Ui
             // Save the new work order and confirm creation.
             await AnsiConsole.Status().StartAsync("Saving...", async _ =>
             {
-                await _work.AddAsync(_currentUserId.Value, summary, string.IsNullOrWhiteSpace(details) ? null : details, due, prio);
+                await _work.AddAsync(_currentUserId.Value, summary, string.IsNullOrWhiteSpace(details) ? null : details, dueUtc, prio);
             });
             AnsiConsole.MarkupLine("[green]Work order created.[/]");
         }
@@ -132,7 +156,7 @@ namespace Trackit.Cli.Ui
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn("Id");
             table.AddColumn("Summary");
-            table.AddColumn("Due (UTC)");
+            table.AddColumn("Due (local)");
             table.AddColumn("Priority");
             table.AddColumn("Status");
 
@@ -147,7 +171,12 @@ namespace Trackit.Cli.Ui
                     _ => "[green]Low[/]"
                 };
                 var status = dueSoon ? "[bold red]Due soon[/]" : "OK";
-                table.AddRow(w.Id.ToString(), Escape(w.Summary), w.DueAtUtc.ToString("u"), prioText, status);
+                table.AddRow(
+                    w.Id.ToString(),
+                    Escape(w.Summary),
+                    w.DueAtUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm"),
+                    prioText,
+                    status);
             }
 
             // Display the table or a message if there are no open work orders.
