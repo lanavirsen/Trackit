@@ -65,6 +65,9 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 
+# local debug settings
+*/Properties/launchSettings.json
+
 # Tye
 .tye/
 
