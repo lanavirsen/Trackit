@@ -1,9 +1,7 @@
 using Spectre.Console;
-using System.Diagnostics;
-using System.IO;
 using Trackit.Core.Domain;
 using Trackit.Core.Services;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using Trackit.Core.Ports;
 
 namespace Trackit.Cli.Ui
 {
@@ -12,12 +10,14 @@ namespace Trackit.Cli.Ui
     {
         private readonly UserService _users;
         private readonly WorkOrderService _work;
+        private readonly INotificationService _notifications;
         private int? _currentUserId;
         private string? _currentUsername;
+        private string? _currentUserEmail;
 
         // Constructor accepting user and work order services.
-        public UiShell(UserService users, WorkOrderService work)
-        { _users = users; _work = work; }
+        public UiShell(UserService users, WorkOrderService work, INotificationService notifications)
+        { _users = users; _work = work; _notifications = notifications; }
 
         // Main loop to run the CLI application.
         public async Task RunAsync()
@@ -86,6 +86,7 @@ namespace Trackit.Cli.Ui
             }
             _currentUserId = res.User!.Id;
             _currentUsername = res.User.Username;
+            _currentUserEmail = res.User.Email;
             AnsiConsole.MarkupLine($"[green]Logged in as[/] [bold]{_currentUsername}[/].");
             return true;
         }
@@ -102,7 +103,7 @@ namespace Trackit.Cli.Ui
                 // Action menu displayed under the list
                 var action = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
-                        .AddChoices("Add work order", "Change stage", "Report", "Refresh", "Logout"));
+                        .AddChoices("Add work order", "Change stage", "Report", "Refresh", "Check notifications", "Logout"));
 
                 switch (action)
                 {
@@ -118,9 +119,13 @@ namespace Trackit.Cli.Ui
                     case "Refresh":
                         // no-op; next loop iteration re-renders
                         break;
+                    case "Check notifications":
+                        await CheckNotificationsAsync();
+                        break;
                     case "Logout":
                         _currentUserId = null;
                         _currentUsername = null;
+                        _currentUserEmail = null;
                         return; // exit workspace back to main menu
                 }
                 // loop continues; screen will clear and re-render list + actions
@@ -340,6 +345,37 @@ namespace Trackit.Cli.Ui
             }
         }
 
+        private async Task CheckNotificationsAsync()
+        {
+            if (!RequireLogin()) return;
+
+            AnsiConsole.MarkupLine("[bold]Checking for due work orders...[/]");
+            
+            try
+            {
+                // Get user email from login.
+                if (string.IsNullOrWhiteSpace(_currentUserEmail))
+                {
+                    AnsiConsole.MarkupLine("[red]No email address found for user. Please update your profile.[/]");
+                    return;
+                }
+                
+                // Check for work orders due in the next 24 hours.
+                var timeWindow = TimeSpan.FromHours(24);
+                await _work.SendDueNotificationsAsync(_currentUserId!.Value, _currentUserEmail!, timeWindow);
+
+                AnsiConsole.MarkupLine("[green]Notification check completed![/]");
+                AnsiConsole.MarkupLine("[grey]If you have work orders due soon, you should have received email notifications.[/]");
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Error checking notifications:[/] {ex.Message}");
+            }
+            
+            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
+            Console.ReadKey();
+        }
+
         private async Task ShowReportAsync()
         {
             // temporary placeholder until report feature is added
@@ -358,7 +394,7 @@ namespace Trackit.Cli.Ui
         }
 
         // Header renderer
-        private void RenderHeader(string? subtitle = null)
+        private void RenderHeader()
         {
             AnsiConsole.Clear();
             AnsiConsole.Write(new FigletText("Trackit").Centered().Color(Color.Aqua));
@@ -373,7 +409,7 @@ namespace Trackit.Cli.Ui
         // Escape a string for safe markup display.
         private static string Escape(string s) => Markup.Escape(s);
 
-        // “Press Enter to cancel” helper.
+        // ï¿½Press Enter to cancelï¿½ helper.
         private static void PrintCancelHint() =>
             AnsiConsole.MarkupLine("[grey]Press Enter to cancel[/]");
 

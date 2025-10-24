@@ -8,12 +8,14 @@ namespace Trackit.Core.Services
     {
         private readonly IWorkOrderRepository _repo;
         private readonly Func<DateTimeOffset> _nowUtc;
+        private readonly INotificationService? _notifications;
 
         // Constructor accepting a repository and an optional function to get the current UTC time.
-        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null)
+        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null, INotificationService? notifications = null)
         {
             _repo = repo;
             _nowUtc = nowUtc ?? (() => DateTimeOffset.UtcNow);
+            _notifications = notifications;
         }
 
         // Suggests a priority level based on the due date.
@@ -88,6 +90,49 @@ namespace Trackit.Core.Services
                 UpdatedAtUtc = now
             };
             await _repo.UpdateAsync(updated, ct);
+        }
+
+        // Gets work orders that are due within the specified time window.
+        public async Task<IReadOnlyList<WorkOrder>> GetDueWorkOrdersAsync(int creatorUserId, TimeSpan timeWindow, CancellationToken ct = default)
+        {
+            var now = _nowUtc();
+            var dueThreshold = now.Add(timeWindow);
+            
+            var allOpen = await _repo.ListOpenAsync(creatorUserId, ct);
+            return allOpen.Where(wo => wo.DueAtUtc <= dueThreshold && wo.DueAtUtc >= now).ToList();
+        }
+
+        // Gets work orders that are overdue.
+        public async Task<IReadOnlyList<WorkOrder>> GetOverdueWorkOrdersAsync(int creatorUserId, CancellationToken ct = default)
+        {
+            var now = _nowUtc();
+            var allOpen = await _repo.ListOpenAsync(creatorUserId, ct);
+            return allOpen.Where(wo => wo.DueAtUtc < now).ToList();
+        }
+
+        // Sends notifications for work orders due within the specified time window.
+        public async Task SendDueNotificationsAsync(int creatorUserId, string userEmail, TimeSpan timeWindow, CancellationToken ct = default)
+        {
+            if (_notifications is null || string.IsNullOrWhiteSpace(userEmail)) return;
+
+            var dueWorkOrders = await GetDueWorkOrdersAsync(creatorUserId, timeWindow, ct);
+            
+            foreach (var workOrder in dueWorkOrders)
+            {
+                try
+                {
+                    await _notifications.SendWorkOrderDueNotificationAsync(
+                        userEmail, 
+                        workOrder.Summary, 
+                        workOrder.DueAtUtc, 
+                        ct);
+                }
+                catch
+                {
+                    // Log error but don't fail the entire operation.
+                    // In a real application, there should be proper logging here.
+                }
+            }
         }
     }
 }

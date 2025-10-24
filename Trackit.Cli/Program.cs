@@ -2,6 +2,7 @@
 using Trackit.Core.Services;
 using Trackit.Data.Repositories;
 using Trackit.Data.Sqlite;
+using Trackit.Data.Services;
 using Trackit.Cli.Ui;
 
 namespace Trackit.Cli
@@ -10,7 +11,7 @@ namespace Trackit.Cli
     {
         public static async Task Main()
         {
-            // Database setup (stable per-user path)
+            // Database setup (stable per-user path).
             var dataRoot = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Trackit");
@@ -27,9 +28,14 @@ namespace Trackit.Cli
 
             var hasher = new PasswordHasher();
             var userSvc = new UserService(userRepo, hasher);
-            var workSvc = new WorkOrderService(workRepo);
+            
+            // Notification service setup.
+            var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY") ?? "";
+            var notificationService = new ResendNotificationService(resendApiKey);
+            
+            var workSvc = new WorkOrderService(workRepo, null, notificationService);
 
-            var ui = new UiShell(userSvc, workSvc);
+            var ui = new UiShell(userSvc, workSvc, notificationService);
             await ui.RunAsync();
         }
     }
