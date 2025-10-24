@@ -8,14 +8,14 @@ namespace Trackit.Core.Services
     {
         private readonly IWorkOrderRepository _repo;
         private readonly Func<DateTimeOffset> _nowUtc;
-        private readonly INotificationService? _notifications;
+        private readonly IEmailSender? _email;
 
         // Constructor accepting a repository and an optional function to get the current UTC time.
-        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null, INotificationService? notifications = null)
+        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null, IEmailSender? email = null)
         {
             _repo = repo;
             _nowUtc = nowUtc ?? (() => DateTimeOffset.UtcNow);
-            _notifications = notifications;
+            _email = email;
         }
 
         // Suggests a priority level based on the due date.
@@ -91,48 +91,33 @@ namespace Trackit.Core.Services
             };
             await _repo.UpdateAsync(updated, ct);
         }
-
-        // Gets work orders that are due within the specified time window.
-        public async Task<IReadOnlyList<WorkOrder>> GetDueWorkOrdersAsync(int creatorUserId, TimeSpan timeWindow, CancellationToken ct = default)
+        // Idempotent due-soon notifications using NotificationLog and IEmailSender.
+        public async Task<int> SendDueNotificationsAsync(int UserId, string toEmail, TimeSpan window, CancellationToken ct = default)
         {
+            if (string.IsNullOrWhiteSpace(toEmail)) throw new ArgumentException("Recipient email required", nameof(toEmail));
+            if (_email is null) throw new InvalidOperationException("Email sender not configured");
+
             var now = _nowUtc();
-            var dueThreshold = now.Add(timeWindow);
-            
-            var allOpen = await _repo.ListOpenAsync(creatorUserId, ct);
-            return allOpen.Where(wo => wo.DueAtUtc <= dueThreshold && wo.DueAtUtc >= now).ToList();
-        }
+            var until = now.Add(window);
+            var windowTag = $"{(int)window.TotalHours}h";
 
-        // Gets work orders that are overdue.
-        public async Task<IReadOnlyList<WorkOrder>> GetOverdueWorkOrdersAsync(int creatorUserId, CancellationToken ct = default)
-        {
-            var now = _nowUtc();
-            var allOpen = await _repo.ListOpenAsync(creatorUserId, ct);
-            return allOpen.Where(wo => wo.DueAtUtc < now).ToList();
-        }
+            var items = await _repo.ListDueSoonAsync(UserId, now, until, windowTag, ct);
+            var count = 0;
 
-        // Sends notifications for work orders due within the specified time window.
-        public async Task SendDueNotificationsAsync(int creatorUserId, string userEmail, TimeSpan timeWindow, CancellationToken ct = default)
-        {
-            if (_notifications is null || string.IsNullOrWhiteSpace(userEmail)) return;
-
-            var dueWorkOrders = await GetDueWorkOrdersAsync(creatorUserId, timeWindow, ct);
-            
-            foreach (var workOrder in dueWorkOrders)
+            foreach (var item in items)
             {
-                try
-                {
-                    await _notifications.SendWorkOrderDueNotificationAsync(
-                        userEmail, 
-                        workOrder.Summary, 
-                        workOrder.DueAtUtc, 
-                        ct);
-                }
-                catch
-                {
-                    // Log error but don't fail the entire operation.
-                    // In a real application, there should be proper logging here.
-                }
+                var localDue = item.DueAtUtc.ToLocalTime();
+                var subject = $"Due soon: {item.Summary} ({localDue:yyyy-MM-dd HH:mm})";
+                var html = $@"<h3>Work order due soon</h3>
+                              <p><strong>{System.Net.WebUtility.HtmlEncode(item.Summary)}</strong></p>
+                              <p>Priority: {item.Priority}</p>
+                              <p>Due (local): {localDue:yyyy-MM-dd HH:mm}</p>";
+
+                await _email.SendEmailAsync(toEmail, subject, html, null, ct);
+                await _repo.AddNotificationLogAsync(item.Id, windowTag, now, ct);
+                count++;
             }
+            return count;
         }
     }
 }

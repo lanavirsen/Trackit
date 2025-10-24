@@ -10,14 +10,14 @@ namespace Trackit.Cli.Ui
     {
         private readonly UserService _users;
         private readonly WorkOrderService _work;
-        private readonly INotificationService _notifications;
         private int? _currentUserId;
         private string? _currentUsername;
         private string? _currentUserEmail;
+        private readonly IEmailSender _emailSender;
 
         // Constructor accepting user and work order services.
-        public UiShell(UserService users, WorkOrderService work, INotificationService notifications)
-        { _users = users; _work = work; _notifications = notifications; }
+        public UiShell(UserService users, WorkOrderService work, IEmailSender emailSender)
+        { _users = users; _work = work; _emailSender = emailSender; }
 
         // Main loop to run the CLI application.
         public async Task RunAsync()
@@ -103,7 +103,7 @@ namespace Trackit.Cli.Ui
                 // Action menu displayed under the list
                 var action = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
-                        .AddChoices("Add work order", "Change stage", "Report", "Refresh", "Check notifications", "Logout"));
+                        .AddChoices("Add work order", "Change stage", "Report", "Refresh", "Due check (24h)", "Logout"));
 
                 switch (action)
                 {
@@ -119,8 +119,8 @@ namespace Trackit.Cli.Ui
                     case "Refresh":
                         // no-op; next loop iteration re-renders
                         break;
-                    case "Check notifications":
-                        await CheckNotificationsAsync();
+                    case "Due check (24h)":
+                        await RunDueCheckAsync();
                         break;
                     case "Logout":
                         _currentUserId = null;
@@ -196,7 +196,7 @@ namespace Trackit.Cli.Ui
 
             await AnsiConsole.Status().StartAsync("Saving...", async _ =>
             {
-                await _work.AddAsync(_currentUserId.Value, summary,
+                await _work.AddAsync(_currentUserId!.Value, summary,
                     string.IsNullOrWhiteSpace(details) ? null : details, dueUtc, prio);
             });
             AnsiConsole.MarkupLine("[green]Work order created.[/]");
@@ -215,7 +215,7 @@ namespace Trackit.Cli.Ui
         private async Task ListOpenAsync(bool renderOnly = false)
         {
             if (!RequireLogin()) return;
-            var items = await _work.ListOpenAsync(_currentUserId.Value);
+            var items = await _work.ListOpenAsync(_currentUserId!.Value);
 
             var table = new Table().Border(TableBorder.Rounded);
             table.AddColumn("Id");
@@ -330,12 +330,12 @@ namespace Trackit.Cli.Ui
                         return;
                     }
 
-                    await _work.CloseAsync(id, _currentUserId.Value, CloseReason.Resolved);
+                    await _work.CloseAsync(id, _currentUserId!.Value, CloseReason.Resolved);
                     AnsiConsole.MarkupLine("[green]Work order closed.[/]");
                 }
                 else
                 {
-                    await _work.ChangeStageAsync(id, _currentUserId.Value, newStage);
+                    await _work.ChangeStageAsync(id, _currentUserId!.Value, newStage);
                     AnsiConsole.MarkupLine("[green]Stage updated.[/]");
                 }
             }
@@ -345,36 +345,45 @@ namespace Trackit.Cli.Ui
             }
         }
 
-        private async Task CheckNotificationsAsync()
+        private async Task RunDueCheckAsync()
         {
-            if (!RequireLogin()) return;
+            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return; }
+            if (string.IsNullOrWhiteSpace(_currentUserEmail))
+            {
+                AnsiConsole.MarkupLine("[red]Your account has no email. Cannot send notifications.[/]");
+                return;
+            }
 
-            AnsiConsole.MarkupLine("[bold]Checking for due work orders...[/]");
-            
             try
             {
-                // Get user email from login.
-                if (string.IsNullOrWhiteSpace(_currentUserEmail))
-                {
-                    AnsiConsole.MarkupLine("[red]No email address found for user. Please update your profile.[/]");
-                    return;
-                }
-                
-                // Check for work orders due in the next 24 hours.
-                var timeWindow = TimeSpan.FromHours(24);
-                await _work.SendDueNotificationsAsync(_currentUserId!.Value, _currentUserEmail!, timeWindow);
+                int sent = 0;
+                await AnsiConsole.Status()
+                    .StartAsync("Checking due items and sending emails...", async _ =>
+                    {
+                        sent = await _work.SendDueNotificationsAsync(_currentUserId.Value, _currentUserEmail!, TimeSpan.FromHours(24));
+                    });
 
-                AnsiConsole.MarkupLine("[green]Notification check completed![/]");
-                AnsiConsole.MarkupLine("[grey]If you have work orders due soon, you should have received email notifications.[/]");
+                var ts = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm");
+                var color = sent > 0 ? "green" : "grey";
+                var msg = sent > 0
+                    ? $"[bold]{sent}[/] notification(s) sent."
+                    : "No notifications to send (idempotent: none pending).";
+
+                var panel = new Panel(new Markup($"{msg}\n[dim]{ts}[/]"))
+                {
+                    Header = new PanelHeader("Due check (24h)", Justify.Center),
+                    Border = BoxBorder.Rounded
+                };
+                AnsiConsole.Write(panel);
+                // brief pause so the message stays visible before returning to the menu
+                await Task.Delay(3000);
             }
-            catch (Exception ex)
+            catch (HttpRequestException ex)
             {
-                AnsiConsole.MarkupLine($"[red]Error checking notifications:[/] {ex.Message}");
+                AnsiConsole.MarkupLine($"[red]Email provider error:[/] {Markup.Escape(ex.Message)}");
             }
-            
-            AnsiConsole.MarkupLine("\n[dim]Press any key to continue...[/]");
-            Console.ReadKey();
         }
+
 
         private async Task ShowReportAsync()
         {
@@ -402,9 +411,6 @@ namespace Trackit.Cli.Ui
                 AnsiConsole.MarkupLine($"[grey]Logged as [/][bold]{Markup.Escape(_currentUsername!)}[/]");
             AnsiConsole.WriteLine();
         }
-
-        // Check if a due date is within the next 24 hours.
-        private static bool IsDueSoon(DateTimeOffset due) => (due - DateTimeOffset.UtcNow) <= TimeSpan.FromHours(24);
 
         // Escape a string for safe markup display.
         private static string Escape(string s) => Markup.Escape(s);

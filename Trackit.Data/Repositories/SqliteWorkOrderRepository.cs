@@ -18,9 +18,9 @@ namespace Trackit.Data.Repositories
         public async Task<int> AddAsync(WorkOrder wo, CancellationToken ct = default)
         {
             const string sql = @"
-INSERT INTO WorkOrders (CreatorUserId, Summary, Details, DueAtUtc, Priority, Stage, Closed, ClosedAtUtc, ClosedReason, CreatedAtUtc, UpdatedAtUtc)
-VALUES (@CreatorUserId, @Summary, @Details, @DueAtUtc, @Priority, @Stage, @Closed, @ClosedAtUtc, @ClosedReason, @CreatedAtUtc, @UpdatedAtUtc);
-SELECT last_insert_rowid();";
+                            INSERT INTO WorkOrders (CreatorUserId, Summary, Details, DueAtUtc, Priority, Stage, Closed, ClosedAtUtc, ClosedReason, CreatedAtUtc, UpdatedAtUtc)
+                            VALUES (@CreatorUserId, @Summary, @Details, @DueAtUtc, @Priority, @Stage, @Closed, @ClosedAtUtc, @ClosedReason, @CreatedAtUtc, @UpdatedAtUtc);
+                            SELECT last_insert_rowid();";
             using var conn = _factory.Create();
             var id = await conn.ExecuteScalarAsync<long>(sql, ToRow(wo));
             return checked((int)id);
@@ -120,5 +120,54 @@ SELECT last_insert_rowid();";
                 UpdatedAtUtc = DateTimeOffset.Parse(UpdatedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
             };
         }
+
+        // List WorkOrders that are due soon and have not yet had notifications sent for the specified window.
+        public async Task<IReadOnlyList<DueSoonItem>> ListDueSoonAsync(int userId, DateTimeOffset nowUtc, DateTimeOffset untilUtc, string windowTag, CancellationToken ct = default)
+        {
+            const string sql = @"
+                            SELECT w.Id, w.Summary, w.DueAtUtc, w.Priority
+                            FROM WorkOrders w
+                            LEFT JOIN NotificationLog n
+                              ON n.WorkOrderId = w.Id AND n.WindowTag = @windowTag
+                            WHERE w.CreatorUserId = @u
+                              AND w.Closed = 0
+                              AND w.DueAtUtc >= @nowUtc
+                              AND w.DueAtUtc <  @untilUtc
+                              AND n.Id IS NULL
+                            ORDER BY w.DueAtUtc ASC;";
+
+            using var conn = _factory.Create();
+            var rows = await conn.QueryAsync(sql, new
+            {
+                u = userId,
+                windowTag,
+                nowUtc = nowUtc.UtcDateTime.ToString("O"),
+                untilUtc = untilUtc.UtcDateTime.ToString("O")
+            });
+
+            var list = new List<DueSoonItem>();
+            foreach (var r in rows)
+                list.Add(new DueSoonItem(
+                    Id: (int)r.Id,
+                    Summary: (string)r.Summary,
+                    DueAtUtc: DateTimeOffset.Parse((string)r.DueAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
+                    Priority: (Priority)(int)r.Priority));
+            return list;
+        }
+
+        // Add a log entry indicating that a notification has been sent for a WorkOrder.
+        public async Task AddNotificationLogAsync(int workOrderId, string windowTag, DateTimeOffset sentAtUtc, CancellationToken ct = default)
+        {
+            const string sql = @"INSERT OR IGNORE INTO NotificationLog(WorkOrderId, WindowTag, SentAtUtc)
+                             VALUES(@id, @tag, @sentAt);";
+            using var conn = _factory.Create();
+            await conn.ExecuteAsync(sql, new
+            {
+                id = workOrderId,
+                tag = windowTag,
+                sentAt = sentAtUtc.UtcDateTime.ToString("O")
+            });
+        }
+
     }
 }
