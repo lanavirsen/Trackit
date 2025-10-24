@@ -32,6 +32,8 @@ namespace Trackit.Data.Sqlite
             // Check if the "Stage" column exists in the "WorkOrders" table; if not, apply the migration to add it.
             if (!await ColumnExistsAsync(conn, "WorkOrders", "Stage"))
                 await ExecEmbedded("003_stage.sql");
+
+            await ExecEmbedded("004_notifications.sql");
         }
 
         // Reads an embedded SQL file from the assembly's resources.
