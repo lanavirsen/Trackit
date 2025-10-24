@@ -1,0 +1,4 @@
+PRAGMA foreign_keys = ON;
+
+ALTER TABLE Users ADD COLUMN TotpSecret TEXT;
+ALTER TABLE Users ADD COLUMN TwoFactorEnabled INTEGER DEFAULT 0;

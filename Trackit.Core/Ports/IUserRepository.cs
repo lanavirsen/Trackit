@@ -13,5 +13,8 @@ namespace Trackit.Core.Ports
 
         // Returns generated Id. Throws InvalidOperationException on duplicate username.
         Task<int> AddAsync(User user, CancellationToken ct = default);
+
+        // Updates an existing user. Assumes user with given Id already exists.
+        Task UpdateAsync(User user, CancellationToken ct = default);
     }
 }

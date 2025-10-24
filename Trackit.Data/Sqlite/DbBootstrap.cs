@@ -34,6 +34,7 @@ namespace Trackit.Data.Sqlite
                 await ExecEmbedded("003_stage.sql");
 
             await ExecEmbedded("004_notifications.sql");
+            await ExecEmbedded("005_totp.sql");
         }
 
         // Reads an embedded SQL file from the assembly's resources.
