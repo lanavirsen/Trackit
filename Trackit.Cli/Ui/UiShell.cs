@@ -260,11 +260,44 @@ namespace Trackit.Cli.Ui
 
             await AnsiConsole.Status().StartAsync("Saving...", async _ =>
             {
-                await _work.AddAsync(_currentUserId!.Value, summary,
-                    string.IsNullOrWhiteSpace(details) ? null : details, dueUtc, prio);
+                try
+                {
+                    await _work.AddAsync(
+                        _currentUserId!.Value,
+                        summary,
+                        string.IsNullOrWhiteSpace(details) ? null : details,
+                        dueUtc,
+                        prio,
+                        allowPastDue: false);
+                    AnsiConsole.MarkupLine("[green]Work order created.[/]");
+                    await Task.Delay(2000);
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("Due cannot be in the past."))
+                {
+                    var overridePast = AnsiConsole.Confirm("[yellow]Due is in the past. Create anyway?[/]");
+                    if (!overridePast)
+                    {
+                        AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                        await Task.Delay(1500);
+                        return;
+                    }
+
+                    await _work.AddAsync(
+                        _currentUserId!.Value,
+                        summary,
+                        string.IsNullOrWhiteSpace(details) ? null : details,
+                        dueUtc,
+                        prio,
+                        allowPastDue: true);
+                    AnsiConsole.MarkupLine("[green]Work order created (past due allowed).[/]");
+                    await Task.Delay(2000);
+                }
+                catch (ArgumentException ex)
+                {
+                    AnsiConsole.MarkupLine($"[red]{Markup.Escape(ex.Message)}[/]");
+                    await Task.Delay(2000);
+                }
             });
-            AnsiConsole.MarkupLine("[green]Work order created.[/]");
-            await Task.Delay(2000);
         }
 
         private static string FormatRelative(TimeSpan span)
