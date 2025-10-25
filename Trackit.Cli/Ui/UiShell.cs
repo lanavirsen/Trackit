@@ -90,6 +90,7 @@ namespace Trackit.Cli.Ui
             if (!res.IsSuccess)
             {
                 AnsiConsole.MarkupLine($"[red]{res.Error}[/]");
+                await Task.Delay(1500);
                 return false;
             }
 
@@ -103,6 +104,7 @@ namespace Trackit.Cli.Ui
                 if (!ok)
                 {
                     AnsiConsole.MarkupLine("[red]Invalid or expired TOTP code.[/]");
+                    await Task.Delay(1500);
                     return false;
                 }
             }
@@ -114,7 +116,7 @@ namespace Trackit.Cli.Ui
             _twoFactorEnabled = user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TotpSecret);
 
             AnsiConsole.MarkupLine($"[green]Logged in as[/] [bold]{_currentUsername}[/].");
-            await Task.Delay(2000);
+            await Task.Delay(1500);
             return true;
         }
 
@@ -173,8 +175,8 @@ namespace Trackit.Cli.Ui
                         break;
 
                     case "Enable TOTP (2FA)":
-                        await EnableTotpAsync();
-                        _twoFactorEnabled = true;
+                        if (await EnableTotpAsync())
+                            _twoFactorEnabled = true;
                         break;
 
                     case "Disable TOTP (2FA)":
@@ -453,33 +455,48 @@ namespace Trackit.Cli.Ui
             }
         }
 
-        private async Task EnableTotpAsync()
+        private async Task<bool> EnableTotpAsync()
         {
-            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return; }
+            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return false; }
 
-            // create secret + URI, but do not persist until code is verified (safer UX)
             var totp = new TotpService();
             var secret = totp.GenerateSecret();
             var uri = totp.BuildUri("Trackit", _currentUsername ?? $"user{_currentUserId}", secret);
 
             AnsiConsole.MarkupLine($"[yellow]TOTP secret:[/] {secret}");
             AnsiConsole.MarkupLine($"[yellow]URI:[/] {uri}");
-            AnsiConsole.MarkupLine("[grey]Add this to your authenticator, then enter the current 6-digit code.[/]");
+            AnsiConsole.MarkupLine("[grey]Scan in your authenticator. Enter code to confirm, or press Enter to cancel.[/]");
 
-            var code = AnsiConsole.Prompt(new TextPrompt<string>("Code:").Secret());
-            if (!totp.VerifyCode(secret, code, allowedDriftSteps: 1))
+            while (true)
             {
-                AnsiConsole.MarkupLine("[red]Invalid/expired code. 2FA not enabled.[/]");
-                await Task.Delay(2000);
-                return;
+                var code = AnsiConsole.Prompt(
+                    new TextPrompt<string>("Code (6 digits):")
+                        .AllowEmpty()
+                        .Secret());
+
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    AnsiConsole.MarkupLine("[grey]Cancelled. 2FA not enabled.[/]");
+                    await Task.Delay(1500);
+                    return false;
+                }
+
+                if (totp.VerifyCode(secret, code, allowedDriftSteps: 1))
+                {
+                    await _tfa.EnableAsync(_currentUserId.Value, secret);
+                    AnsiConsole.MarkupLine("[green]2FA enabled.[/]");
+                    await Task.Delay(1500);
+                    return true;
+                }
+
+                var retry = AnsiConsole.Confirm("[red]Invalid/expired code.[/] Try again?");
+                if (!retry)
+                {
+                    AnsiConsole.MarkupLine("[grey]Aborted. 2FA not enabled.[/]");
+                    await Task.Delay(1500);
+                    return false;
+                }
             }
-
-            // persist only after successful verification
-            await _tfa.EnableAsync(_currentUserId.Value, secret);
-
-            _twoFactorEnabled = true;
-            AnsiConsole.MarkupLine("[green]2FA enabled.[/]");
-            await Task.Delay(2000);
         }
 
         private async Task DisableTotpAsync()
