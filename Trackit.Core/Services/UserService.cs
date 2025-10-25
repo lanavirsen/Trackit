@@ -68,6 +68,11 @@ namespace Trackit.Core.Services
             var ok = _hasher.Verify(password, user.PasswordHash, user.PasswordSalt);
             return ok ? LoginResult.Ok(user) : LoginResult.Fail("Invalid username or password");
         }
+
+        // Determines if two-factor authentication is required for the given user.
+        public bool IsTwoFactorRequired(User u) =>
+            u.TwoFactorEnabled && !string.IsNullOrEmpty(u.TotpSecret);
+
     }
 
     /*

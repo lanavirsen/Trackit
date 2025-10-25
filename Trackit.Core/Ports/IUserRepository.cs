@@ -9,9 +9,15 @@ namespace Trackit.Core.Ports
     {
         // normalizedUsername MUST be lowercased/trimmed by caller.
         Task<User?> GetByUsernameAsync(string normalizedUsername, CancellationToken ct = default);
+
+        Task<User?> GetByIdAsync(int id, CancellationToken ct = default);
+
         Task<bool> ExistsAsync(string normalizedUsername, CancellationToken ct = default);
 
         // Returns generated Id. Throws InvalidOperationException on duplicate username.
         Task<int> AddAsync(User user, CancellationToken ct = default);
+
+        // Updates an existing user. Assumes user with given Id already exists.
+        Task UpdateAsync(User user, CancellationToken ct = default);
     }
 }

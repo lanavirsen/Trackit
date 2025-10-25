@@ -19,6 +19,8 @@ namespace Trackit.Core.Domain
         public byte[] PasswordHash { get; init; } = Array.Empty<byte>();
         public byte[] PasswordSalt { get; init; } = Array.Empty<byte>();
         public DateTimeOffset CreatedAtUtc { get; init; }   // record when the user account was created, in universal time (UTC).
+        public string? TotpSecret { get; set; }
+        public bool TwoFactorEnabled { get; set; }
     }
 }
 

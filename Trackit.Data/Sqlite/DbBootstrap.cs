@@ -33,7 +33,20 @@ namespace Trackit.Data.Sqlite
             if (!await ColumnExistsAsync(conn, "WorkOrders", "Stage"))
                 await ExecEmbedded("003_stage.sql");
 
+            // --- Add missing TOTP columns safely ---
+            if (!await ColumnExistsAsync(conn, "Users", "TotpSecret"))
+            {
+                using var cmd = new SqliteCommand("ALTER TABLE Users ADD COLUMN TotpSecret TEXT;", conn);
+                await cmd.ExecuteNonQueryAsync();
+            }
+            if (!await ColumnExistsAsync(conn, "Users", "TwoFactorEnabled"))
+            {
+                using var cmd = new SqliteCommand("ALTER TABLE Users ADD COLUMN TwoFactorEnabled INTEGER DEFAULT 0;", conn);
+                await cmd.ExecuteNonQueryAsync();
+            }
+
             await ExecEmbedded("004_notifications.sql");
+            await ExecEmbedded("005_totp.sql");
         }
 
         // Reads an embedded SQL file from the assembly's resources.

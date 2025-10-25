@@ -15,6 +15,7 @@
     <EmbeddedResource Include="Migrations\002_workorders.sql" />
 	<EmbeddedResource Include="Migrations\003_stage.sql" />
 	<EmbeddedResource Include="Migrations\004_notifications.sql" />
+	<EmbeddedResource Include="Migrations\005_totp.sql" />
   </ItemGroup>
 
   <PropertyGroup>

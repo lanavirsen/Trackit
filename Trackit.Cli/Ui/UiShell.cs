@@ -14,10 +14,17 @@ namespace Trackit.Cli.Ui
         private string? _currentUsername;
         private string? _currentUserEmail;
         private readonly IEmailSender _emailSender;
+        private readonly UserTwoFactorManager _tfa;
+        private bool _twoFactorEnabled;
 
         // Constructor accepting user and work order services.
-        public UiShell(UserService users, WorkOrderService work, IEmailSender emailSender)
-        { _users = users; _work = work; _emailSender = emailSender; }
+        public UiShell(UserService users, WorkOrderService work, IEmailSender emailSender, UserTwoFactorManager tfa)
+        {
+            _users = users;
+            _work = work;
+            _emailSender = emailSender;
+            _tfa = tfa;
+        }
 
         // Main loop to run the CLI application.
         public async Task RunAsync()
@@ -78,16 +85,38 @@ namespace Trackit.Cli.Ui
         {
             var username = AnsiConsole.Ask<string>("Username:");
             var password = AnsiConsole.Prompt(new TextPrompt<string>("Password:").Secret());
+
             var res = await _users.LoginAsync(username, password);
             if (!res.IsSuccess)
             {
                 AnsiConsole.MarkupLine($"[red]{res.Error}[/]");
+                await Task.Delay(1500);
                 return false;
             }
-            _currentUserId = res.User!.Id;
-            _currentUsername = res.User.Username;
-            _currentUserEmail = res.User.Email;
+
+            var user = res.User!;
+            // Require TOTP only if enabled and a secret exists
+            if (user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TotpSecret))
+            {
+                var code = AnsiConsole.Prompt(new TextPrompt<string>("Enter 6-digit TOTP code:").Secret());
+                var totp = new TotpService();
+                var ok = totp.VerifyCode(user.TotpSecret, code, allowedDriftSteps: 1);
+                if (!ok)
+                {
+                    AnsiConsole.MarkupLine("[red]Invalid or expired TOTP code.[/]");
+                    await Task.Delay(1500);
+                    return false;
+                }
+            }
+
+            // Set session only after all checks pass
+            _currentUserId = user.Id;
+            _currentUsername = user.Username;
+            _currentUserEmail = user.Email;
+            _twoFactorEnabled = user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TotpSecret);
+
             AnsiConsole.MarkupLine($"[green]Logged in as[/] [bold]{_currentUsername}[/].");
+            await Task.Delay(1500);
             return true;
         }
 
@@ -100,28 +129,61 @@ namespace Trackit.Cli.Ui
                 // Render current open items
                 await ListOpenAsync(renderOnly: true);
 
-                // Action menu displayed under the list
+                // --- Build menu dynamically depending on 2FA state ---
+                var choices = new List<string>
+                {
+                    "Add work order",
+                    "Change stage",
+                    "Report",
+                    "Refresh",
+                    "Due check (24h)"
+                };
+
+                if (_twoFactorEnabled)
+                    choices.Add("Disable TOTP (2FA)");
+                else
+                    choices.Add("Enable TOTP (2FA)");
+
+                choices.Add("Logout");
+
+                // Display menu
                 var action = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
-                        .AddChoices("Add work order", "Change stage", "Report", "Refresh", "Due check (24h)", "Logout"));
+                        .Title("[bold cyan]Choose an action[/]:")
+                        .AddChoices(choices));
 
                 switch (action)
                 {
                     case "Add work order":
                         await AddWorkOrderAsync();
                         break;
+
                     case "Change stage":
                         await ChangeStageAsync();
                         break;
+
                     case "Report":
                         await ShowReportAsync();
                         break;
+
                     case "Refresh":
                         // no-op; next loop iteration re-renders
                         break;
+
                     case "Due check (24h)":
                         await RunDueCheckAsync();
                         break;
+
+                    case "Enable TOTP (2FA)":
+                        if (await EnableTotpAsync())
+                            _twoFactorEnabled = true;
+                        break;
+
+                    case "Disable TOTP (2FA)":
+                        await DisableTotpAsync();
+                        _twoFactorEnabled = false;
+                        break;
+
                     case "Logout":
                         _currentUserId = null;
                         _currentUsername = null;
@@ -151,6 +213,7 @@ namespace Trackit.Cli.Ui
             if (preset.Equals("Cancel", StringComparison.OrdinalIgnoreCase))
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                await Task.Delay(2000);
                 return;
             }
 
@@ -183,6 +246,7 @@ namespace Trackit.Cli.Ui
             if (chosen.Equals("Cancel", StringComparison.OrdinalIgnoreCase))
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                await Task.Delay(2000);
                 return;
             }
 
@@ -200,6 +264,7 @@ namespace Trackit.Cli.Ui
                     string.IsNullOrWhiteSpace(details) ? null : details, dueUtc, prio);
             });
             AnsiConsole.MarkupLine("[green]Work order created.[/]");
+            await Task.Delay(2000);
         }
 
         private static string FormatRelative(TimeSpan span)
@@ -283,11 +348,13 @@ namespace Trackit.Cli.Ui
             if (string.IsNullOrWhiteSpace(idStr))
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                await Task.Delay(2000);
                 return;
             }
             if (!int.TryParse(idStr, out var id) || id <= 0)
             {
                 AnsiConsole.MarkupLine("[red]Invalid Id.[/]");
+                await Task.Delay(2000);
                 return;
             }
 
@@ -307,6 +374,7 @@ namespace Trackit.Cli.Ui
             if (newStageStr.Equals("Cancel", StringComparison.OrdinalIgnoreCase))
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                await Task.Delay(2000);
                 return;
             }
 
@@ -327,16 +395,19 @@ namespace Trackit.Cli.Ui
                     if (!confirm)
                     {
                         AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
+                        await Task.Delay(2000);
                         return;
                     }
 
                     await _work.CloseAsync(id, _currentUserId!.Value, CloseReason.Resolved);
                     AnsiConsole.MarkupLine("[green]Work order closed.[/]");
+                    await Task.Delay(2000);
                 }
                 else
                 {
                     await _work.ChangeStageAsync(id, _currentUserId!.Value, newStage);
                     AnsiConsole.MarkupLine("[green]Stage updated.[/]");
+                    await Task.Delay(2000);
                 }
             }
             catch (Exception ex)
@@ -384,12 +455,86 @@ namespace Trackit.Cli.Ui
             }
         }
 
+        private async Task<bool> EnableTotpAsync()
+        {
+            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return false; }
+
+            var totp = new TotpService();
+            var secret = totp.GenerateSecret();
+            var uri = totp.BuildUri("Trackit", _currentUsername ?? $"user{_currentUserId}", secret);
+
+            AnsiConsole.MarkupLine($"[yellow]TOTP secret:[/] {secret}");
+            AnsiConsole.MarkupLine($"[yellow]URI:[/] {uri}");
+            AnsiConsole.MarkupLine("[grey]Scan in your authenticator. Enter code to confirm, or press Enter to cancel.[/]");
+
+            while (true)
+            {
+                var code = AnsiConsole.Prompt(
+                    new TextPrompt<string>("Code (6 digits):")
+                        .AllowEmpty()
+                        .Secret());
+
+                if (string.IsNullOrWhiteSpace(code))
+                {
+                    AnsiConsole.MarkupLine("[grey]Cancelled. 2FA not enabled.[/]");
+                    await Task.Delay(1500);
+                    return false;
+                }
+
+                if (totp.VerifyCode(secret, code, allowedDriftSteps: 1))
+                {
+                    await _tfa.EnableAsync(_currentUserId.Value, secret);
+                    AnsiConsole.MarkupLine("[green]2FA enabled.[/]");
+                    await Task.Delay(1500);
+                    return true;
+                }
+
+                var retry = AnsiConsole.Confirm("[red]Invalid/expired code.[/] Try again?");
+                if (!retry)
+                {
+                    AnsiConsole.MarkupLine("[grey]Aborted. 2FA not enabled.[/]");
+                    await Task.Delay(1500);
+                    return false;
+                }
+            }
+        }
+
+        private async Task DisableTotpAsync()
+        {
+            if (_currentUserId is null)
+            {
+                AnsiConsole.MarkupLine("[red]Login first.[/]");
+                return;
+            }
+
+            var confirm = AnsiConsole.Confirm("Are you sure you want to disable two-factor authentication?");
+            if (!confirm)
+            {
+                AnsiConsole.MarkupLine("[grey]Canceled.[/]");
+                await Task.Delay(2000);
+                return;
+            }
+
+            try
+            {
+                await _tfa.DisableAsync(_currentUserId.Value);
+                AnsiConsole.MarkupLine("[green]Two-factor authentication disabled.[/]");
+                await Task.Delay(2000);
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Failed to disable 2FA:[/] {Markup.Escape(ex.Message)}");
+            }
+
+            _twoFactorEnabled = false;
+        }
+
 
         private async Task ShowReportAsync()
         {
             // temporary placeholder until report feature is added
             AnsiConsole.MarkupLine("[grey italic]Report feature not implemented yet.[/]");
-            await Task.Delay(500); // just to keep async signature
+            await Task.Delay(1500); // just to keep async signature
         }
 
         // Validate password against policy: min 6 chars, at least 1 digit, 1 uppercase, 1 special char.

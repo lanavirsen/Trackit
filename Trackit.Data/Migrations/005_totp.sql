@@ -1,0 +1,3 @@
+-- Placeholder migration for TOTP fields.
+-- Columns TotpSecret (TEXT) and TwoFactorEnabled (INTEGER) 
+-- are now added conditionally in DbBootstrap to avoid duplicate-column errors.

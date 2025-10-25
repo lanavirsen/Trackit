@@ -17,8 +17,9 @@ namespace Trackit.Data.Repositories
         // Asynchronously retrieves a User by their normalized username.
         public async Task<User?> GetByUsernameAsync(string normalizedUsername, CancellationToken ct = default)
         {
-            const string sql = @"SELECT Id, Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc
-                             FROM Users WHERE Username = @u LIMIT 1;";
+            const string sql = @"SELECT Id, Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc,
+                                TotpSecret, TwoFactorEnabled
+                                FROM Users WHERE Username = @u LIMIT 1;";
             using var conn = _factory.Create();
             var row = await conn.QuerySingleOrDefaultAsync<UserRow>(sql, new { u = normalizedUsername });
 
@@ -43,8 +44,8 @@ namespace Trackit.Data.Repositories
         // Asynchronously adds a new User to the database and returns the generated Id.
         public async Task<int> AddAsync(User user, CancellationToken ct = default)
         {
-            const string sql = @"INSERT INTO Users(Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc)
-                             VALUES(@Username, @Email, @PasswordHash, @PasswordSalt, @CreatedAtUtc);
+            const string sql = @"INSERT INTO Users(Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc, TotpSecret, TwoFactorEnabled)
+                             VALUES(@Username, @Email, @PasswordHash, @PasswordSalt, @CreatedAtUtc, @TotpSecret, @TwoFactorEnabled);
                              SELECT last_insert_rowid();";
             using var conn = _factory.Create();
             try
@@ -55,7 +56,9 @@ namespace Trackit.Data.Repositories
                     user.Email,
                     user.PasswordHash,
                     user.PasswordSalt,
-                    CreatedAtUtc = user.CreatedAtUtc.UtcDateTime.ToString("O")
+                    CreatedAtUtc = user.CreatedAtUtc.UtcDateTime.ToString("O"),
+                    TotpSecret = user.TotpSecret,
+                    TwoFactorEnabled = user.TwoFactorEnabled ? 1 : 0
                 });
                 return checked((int)id);
             }
@@ -63,6 +66,28 @@ namespace Trackit.Data.Repositories
             {
                 throw new InvalidOperationException("Username already exists", ex);
             }
+        }
+
+        public async Task UpdateAsync(User user, CancellationToken ct = default)
+        {
+            const string sql = @"
+                               UPDATE Users SET
+                                   Email = @Email,
+                                   PasswordHash = @PasswordHash,
+                                   PasswordSalt = @PasswordSalt,
+                                   TotpSecret = @TotpSecret,
+                                   TwoFactorEnabled = @TwoFactorEnabled
+                               WHERE Id = @Id;";
+            using var conn = _factory.Create();
+            await conn.ExecuteAsync(sql, new
+            {
+                user.Id,
+                user.Email,
+                user.PasswordHash,
+                user.PasswordSalt,
+                TotpSecret = user.TotpSecret,
+                TwoFactorEnabled = user.TwoFactorEnabled ? 1 : 0
+            });
         }
 
         // Internal class representing a row from the Users table.
@@ -74,6 +99,8 @@ namespace Trackit.Data.Repositories
             public byte[] PasswordHash { get; init; } = Array.Empty<byte>();
             public byte[] PasswordSalt { get; init; } = Array.Empty<byte>();
             public string CreatedAtUtc { get; init; } = null!;
+            public string? TotpSecret { get; init; }
+            public int TwoFactorEnabled { get; init; }
             public User ToDomain() => new()
             {
                 Id = checked((int)Id),
@@ -81,8 +108,24 @@ namespace Trackit.Data.Repositories
                 Email = Email,
                 PasswordHash = PasswordHash,
                 PasswordSalt = PasswordSalt,
-                CreatedAtUtc = DateTimeOffset.Parse(CreatedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind)
+                CreatedAtUtc = DateTimeOffset.Parse(CreatedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
+                TotpSecret = TotpSecret,
+                TwoFactorEnabled = TwoFactorEnabled != 0
             };
         }
+
+        public async Task<User?> GetByIdAsync(int id, CancellationToken ct = default)
+        {
+            const string sql = @"SELECT Id, Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc,
+                                    TotpSecret, TwoFactorEnabled
+                                 FROM Users
+                                 WHERE Id = @id
+                                 LIMIT 1;";
+
+            using var conn = _factory.Create();
+            var row = await conn.QuerySingleOrDefaultAsync<UserRow>(sql, new { id });
+            return row?.ToDomain();
+        }
+
     }
 }

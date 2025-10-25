@@ -40,8 +40,11 @@ namespace Trackit.Cli
 
             // Work order service setup.
             var workSvc = new WorkOrderService(workRepo, null, emailSender);
-            
-            var ui = new UiShell(userSvc, workSvc, emailSender);
+
+            var totpService = new TotpService();
+            var tfaManager = new UserTwoFactorManager(userRepo, new TotpService());
+
+            var ui = new UiShell(userSvc, workSvc, emailSender, tfaManager);
             await ui.RunAsync();
         }
     }
