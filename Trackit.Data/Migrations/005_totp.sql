@@ -1,4 +1,3 @@
-PRAGMA foreign_keys = ON;
-
-ALTER TABLE Users ADD COLUMN TotpSecret TEXT;
-ALTER TABLE Users ADD COLUMN TwoFactorEnabled INTEGER DEFAULT 0;
+-- Placeholder migration for TOTP fields.
+-- Columns TotpSecret (TEXT) and TwoFactorEnabled (INTEGER) 
+-- are now added conditionally in DbBootstrap to avoid duplicate-column errors.
