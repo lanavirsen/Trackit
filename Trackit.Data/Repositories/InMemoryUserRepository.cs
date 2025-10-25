@@ -36,6 +36,9 @@ namespace Trackit.Data.Repositories
 
         private readonly ConcurrentDictionary<string, User> _byUsername = new();
 
+        private readonly ConcurrentDictionary<int, User> _byId = new();
+        private readonly object _gate = new();
+
         private int _nextId = 0;
 
         // Look up a user in the dictionary by username and return it immediately.
@@ -82,40 +85,96 @@ namespace Trackit.Data.Repositories
             if (user.PasswordHash is null || user.PasswordSalt is null)
                 throw new ArgumentException("Password not hashed", nameof(user));
 
-            /* Generate Id
-            
-            Interlocked.Increment(...) is a thread-safe way to increment an integer.
-
-            Why not just _nextId++?
-            - _nextId++ is not atomic — it compiles into separate read, add, and write steps.
-              If two threads run _nextId++ concurrently, both might read the same old value
-              before either writes back, resulting in duplicate IDs.
-            - Interlocked.Increment guarantees each thread gets a unique, sequential value even under concurrency.
-            */
-
-            var id = Interlocked.Increment(ref _nextId);
-
-            var stored = new User
+            lock (_gate)
             {
-                Id = id,
-                Username = user.Username,           // should already be normalized
-                Email = user.Email,
-                PasswordHash = user.PasswordHash,
-                PasswordSalt = user.PasswordSalt,
-                CreatedAtUtc = user.CreatedAtUtc
-            };
+                if (_byUsername.ContainsKey(user.Username))
+                    throw new InvalidOperationException("Username already exists");
 
-            /*
-            The code attempts to insert the new User into the dictionary keyed by username.
-            If another user with the same username is already there, the addition fails atomically,
-            and the repository explicitly throws an error to indicate the username must be unique.
-            */
+                /* Generate Id
 
-            if (!_byUsername.TryAdd(stored.Username, stored))
-                throw new InvalidOperationException("Username already exists");
+                Interlocked.Increment(...) is a thread-safe way to increment an integer.
 
-            // Return the generated Id as a completed Task.
-            return Task.FromResult(id);
+                Why not just _nextId++?
+                - _nextId++ is not atomic — it compiles into separate read, add, and write steps.
+                  If two threads run _nextId++ concurrently, both might read the same old value
+                  before either writes back, resulting in duplicate IDs.
+                - Interlocked.Increment guarantees each thread gets a unique, sequential value even under concurrency.
+                */
+
+                var id = Interlocked.Increment(ref _nextId);
+
+                var stored = new User
+                {
+                    Id = id,
+                    Username = user.Username,           // should already be normalized
+                    Email = user.Email,
+                    PasswordHash = user.PasswordHash,
+                    PasswordSalt = user.PasswordSalt,
+                    CreatedAtUtc = user.CreatedAtUtc,
+                    TotpSecret = user.TotpSecret,
+                    TwoFactorEnabled = user.TwoFactorEnabled
+                };
+
+                /*
+                The code attempts to insert the new User into the dictionary keyed by username.
+                If another user with the same username is already there, the addition fails atomically,
+                and the repository explicitly throws an error to indicate the username must be unique.
+                */
+
+                _byUsername[stored.Username] = stored;
+                _byId[id] = stored;
+
+                // Return the generated Id as a completed Task.
+                return Task.FromResult(id);
+            }
         }
+
+        public Task<User?> GetByIdAsync(int id, CancellationToken ct = default)
+        {
+            _byId.TryGetValue(id, out var user);
+            return Task.FromResult(user);
+        }
+
+        public Task UpdateAsync(User user, CancellationToken ct = default)
+        {
+            if (user.Id <= 0) throw new ArgumentException("Valid Id required", nameof(user));
+            if (string.IsNullOrWhiteSpace(user.Username))
+                throw new ArgumentException("Username required", nameof(user));
+
+            lock (_gate)
+            {
+                if (!_byId.TryGetValue(user.Id, out var existing))
+                    throw new InvalidOperationException("User not found");
+
+                // If username changed, ensure no collision and move the username key
+                if (!string.Equals(existing.Username, user.Username, StringComparison.Ordinal))
+                {
+                    if (_byUsername.TryGetValue(user.Username, out var other) && other.Id != user.Id)
+                        throw new InvalidOperationException("Username already exists");
+
+                    _byUsername.TryRemove(existing.Username, out _);
+                }
+
+                // Preserve CreatedAtUtc; replace the stored record
+                var stored = new User
+                {
+                    Id = existing.Id,
+                    Username = user.Username,   // normalized by caller
+                    Email = user.Email,
+                    PasswordHash = user.PasswordHash,
+                    PasswordSalt = user.PasswordSalt,
+                    CreatedAtUtc = existing.CreatedAtUtc,
+                    TotpSecret = user.TotpSecret,
+                    TwoFactorEnabled = user.TwoFactorEnabled
+                };
+
+                _byId[stored.Id] = stored;
+                _byUsername[stored.Username] = stored;
+            }
+
+            return Task.CompletedTask;
+        }
+
+
     }
 }

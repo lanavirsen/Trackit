@@ -113,5 +113,19 @@ namespace Trackit.Data.Repositories
                 TwoFactorEnabled = TwoFactorEnabled != 0
             };
         }
+
+        public async Task<User?> GetByIdAsync(int id, CancellationToken ct = default)
+        {
+            const string sql = @"SELECT Id, Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc,
+                                    TotpSecret, TwoFactorEnabled
+                                 FROM Users
+                                 WHERE Id = @id
+                                 LIMIT 1;";
+
+            using var conn = _factory.Create();
+            var row = await conn.QuerySingleOrDefaultAsync<UserRow>(sql, new { id });
+            return row?.ToDomain();
+        }
+
     }
 }

@@ -14,18 +14,18 @@ namespace Trackit.Core.Services
             _totp = totp;
         }
 
-        public async Task<(string secret, string uri)> EnableAsync(User user, string issuer, CancellationToken ct = default)
+        // Persist after verification
+        public async Task EnableAsync(int userId, string base32Secret, CancellationToken ct = default)
         {
-            var secret = _totp.GenerateSecret();
-            user.TotpSecret = secret;
+            var user = await _repo.GetByIdAsync(userId, ct) ?? throw new InvalidOperationException("User not found");
+            user.TotpSecret = base32Secret;
             user.TwoFactorEnabled = true;
-
             await _repo.UpdateAsync(user, ct);
-            return (secret, _totp.BuildUri(issuer, user.Username, secret));
         }
 
-        public async Task DisableAsync(User user, CancellationToken ct = default)
+        public async Task DisableAsync(int userId, CancellationToken ct = default)
         {
+            var user = await _repo.GetByIdAsync(userId, ct) ?? throw new InvalidOperationException("User not found");
             user.TotpSecret = null;
             user.TwoFactorEnabled = false;
             await _repo.UpdateAsync(user, ct);
