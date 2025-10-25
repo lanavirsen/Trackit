@@ -77,9 +77,13 @@ namespace Trackit.Core.Services
             return await _repo.AddAsync(wo, ct);
         }
 
-        // Retrieves a work order by its ID.
+        // Lists all open work orders for a specific creator user.
         public Task<IReadOnlyList<WorkOrder>> ListOpenAsync(int creatorUserId, CancellationToken ct = default)
             => _repo.ListOpenAsync(creatorUserId, ct);
+
+        // Retrieves a work order by its ID.
+        public Task<WorkOrder?> GetByIdAsync(int id, CancellationToken ct = default)
+            => _repo.GetAsync(id, ct);
 
         public async Task CloseAsync(int id, int actorUserId, CloseReason reason, CancellationToken ct = default)
         {
@@ -146,5 +150,27 @@ namespace Trackit.Core.Services
             }
             return count;
         }
+
+        // Aggregate counts of work orders by stage for a specific user.
+        public async Task<(int Total, int Open, int InProgress, int AwaitingParts, int Closed)> GetStageCountsAsync(int userId, CancellationToken ct = default)
+        {
+            var all = await _repo.ListByUserAsync(userId, ct);
+            var open = all.Count(x => x.Stage == Stage.Open);
+            var prog = all.Count(x => x.Stage == Stage.InProgress);
+            var parts = all.Count(x => x.Stage == Stage.AwaitingParts);
+            var closed = all.Count(x => x.Stage == Stage.Closed);
+            return (all.Count, open, prog, parts, closed);
+        }
+
+        // Aggregate counts of work orders by priority for a specific user.
+        public async Task<(int High, int Medium, int Low)> GetPriorityCountsAsync(int userId, CancellationToken ct = default)
+        {
+            var all = await _repo.ListByUserAsync(userId, ct);
+            var high = all.Count(x => x.Priority == Priority.High);
+            var med = all.Count(x => x.Priority == Priority.Medium);
+            var low = all.Count(x => x.Priority == Priority.Low);
+            return (high, med, low);
+        }
+
     }
 }

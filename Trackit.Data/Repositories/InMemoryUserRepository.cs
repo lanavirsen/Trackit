@@ -175,6 +175,5 @@ namespace Trackit.Data.Repositories
             return Task.CompletedTask;
         }
 
-
     }
 }

@@ -11,7 +11,9 @@ namespace Trackit.Core.Ports
         Task UpdateAsync(WorkOrder wo, CancellationToken ct = default);
         Task<IReadOnlyList<DueSoonItem>> ListDueSoonAsync(int userId, DateTimeOffset nowUtc, DateTimeOffset untilUtc, string windowTag, CancellationToken ct = default);
         Task AddNotificationLogAsync(int workOrderId, string windowTag, DateTimeOffset sentAtUtc, CancellationToken ct = default);
-}
+        Task<IReadOnlyList<WorkOrder>> ListByUserAsync(int creatorUserId, CancellationToken ct = default);
+
+    }
 
     /*
     A port is an abstraction (interface) that defines how core logic communicates with the outside world — 

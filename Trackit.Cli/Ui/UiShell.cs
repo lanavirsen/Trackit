@@ -381,15 +381,24 @@ namespace Trackit.Cli.Ui
             if (string.IsNullOrWhiteSpace(idStr))
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
-                await Task.Delay(2000);
+                await Task.Delay(1500);
                 return;
             }
             if (!int.TryParse(idStr, out var id) || id <= 0)
             {
                 AnsiConsole.MarkupLine("[red]Invalid Id.[/]");
-                await Task.Delay(2000);
+                await Task.Delay(1500);
                 return;
             }
+
+            // check existence early
+            var existing = await _work.GetByIdAsync(id);
+                if (existing is null)
+                {
+                    AnsiConsole.MarkupLine($"[red]No work order found with Id {id}.[/]");
+                    await Task.Delay(1500);
+                    return;
+                }
 
             // --- clear screen, show header, and re-render the current list ---
             RenderHeader();
@@ -407,7 +416,7 @@ namespace Trackit.Cli.Ui
             if (newStageStr.Equals("Cancel", StringComparison.OrdinalIgnoreCase))
             {
                 AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
-                await Task.Delay(2000);
+                await Task.Delay(1500);
                 return;
             }
 
@@ -428,19 +437,19 @@ namespace Trackit.Cli.Ui
                     if (!confirm)
                     {
                         AnsiConsole.MarkupLine("[grey]Cancelled.[/]");
-                        await Task.Delay(2000);
+                        await Task.Delay(1500);
                         return;
                     }
 
                     await _work.CloseAsync(id, _currentUserId!.Value, CloseReason.Resolved);
                     AnsiConsole.MarkupLine("[green]Work order closed.[/]");
-                    await Task.Delay(2000);
+                    await Task.Delay(1500);
                 }
                 else
                 {
                     await _work.ChangeStageAsync(id, _currentUserId!.Value, newStage);
                     AnsiConsole.MarkupLine("[green]Stage updated.[/]");
-                    await Task.Delay(2000);
+                    await Task.Delay(1500);
                 }
             }
             catch (Exception ex)
@@ -565,9 +574,57 @@ namespace Trackit.Cli.Ui
 
         private async Task ShowReportAsync()
         {
-            // temporary placeholder until report feature is added
-            AnsiConsole.MarkupLine("[grey italic]Report feature not implemented yet.[/]");
-            await Task.Delay(1500); // just to keep async signature
+            if (!RequireLogin()) return;
+
+            RenderHeader();
+
+            var userId = _currentUserId!.Value;
+
+            var stageCounts = await _work.GetStageCountsAsync(userId);
+            var priorityCounts = await _work.GetPriorityCountsAsync(userId);
+            var openItems = await _work.ListOpenAsync(userId);
+
+            AnsiConsole.MarkupLine("[bold underline]Workspace Snapshot[/]");
+            AnsiConsole.WriteLine();
+
+            var (total, open, inProgress, awaitingParts, closed) = stageCounts;
+            var (high, medium, low) = priorityCounts;
+
+            var stageTable = new Table()
+                .Border(TableBorder.Rounded)
+                .Title("Stage Breakdown");
+            stageTable.AddColumn(new TableColumn("Stage").LeftAligned());
+            stageTable.AddColumn(new TableColumn("Count").Centered());
+            stageTable.AddRow("[silver]Total[/]", total.ToString());
+            stageTable.AddRow("[cyan]Open[/]", open.ToString());
+            stageTable.AddRow("[yellow]In Progress[/]", inProgress.ToString());
+            stageTable.AddRow("[magenta]Awaiting Parts[/]", awaitingParts.ToString());
+            stageTable.AddRow("[grey]Closed[/]", closed.ToString());
+
+            var priorityTable = new Table()
+                .Border(TableBorder.Rounded)
+                .Title("Priority Mix");
+            priorityTable.AddColumn(new TableColumn("Priority").LeftAligned());
+            priorityTable.AddColumn(new TableColumn("Count").Centered());
+            priorityTable.AddRow("[red]High[/]", high.ToString());
+            priorityTable.AddRow("[yellow]Medium[/]", medium.ToString());
+            priorityTable.AddRow("[green]Low[/]", low.ToString());
+
+            AnsiConsole.Write(new Columns(stageTable, priorityTable).Expand());
+            AnsiConsole.WriteLine();
+
+            var now = DateTimeOffset.UtcNow;
+            var overdue = openItems.Count(w => w.DueAtUtc < now);
+            var dueSoon = openItems.Count(w => w.DueAtUtc >= now && w.DueAtUtc <= now.AddHours(24));
+            AnsiConsole.MarkupLine($"[red]Overdue:[/] {overdue}    [yellow]Due <=24h:[/] {dueSoon}    [green]Open backlog:[/] {open}");
+            AnsiConsole.WriteLine();
+
+            if (openItems.Count == 0)
+                AnsiConsole.MarkupLine("[grey]No open work orders yet. Add one from the workspace menu.[/]");
+
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[grey]Press any key to return...[/]");
+            Console.ReadKey(intercept: true);
         }
 
         // Validate password against policy: min 6 chars, at least 1 digit, 1 uppercase, 1 special char.
