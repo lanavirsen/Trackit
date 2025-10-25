@@ -85,5 +85,33 @@ namespace Trackit.Tests
             svc.SuggestPriority(DateTimeOffset.Parse("2025-10-13T00:00:00Z")).Should().Be(Priority.Low);
         }
 
+        [Fact]
+        public async Task Reporting_counts_reflect_current_state()
+        {
+            var now = DateTimeOffset.Parse("2025-10-10T00:00:00Z");
+            var repo = new InMemoryWorkOrderRepository();
+            var svc = new WorkOrderService(repo, () => now);
+            const int userId = 42;
+
+            var openId = await svc.AddAsync(userId, "Open item", null, now.AddHours(6), Priority.High);
+            var progressId = await svc.AddAsync(userId, "In progress item", null, now.AddHours(30), Priority.Medium);
+            var closedId = await svc.AddAsync(userId, "Closed item", null, now.AddHours(-2), priority: Priority.Low, allowPastDue: true);
+
+            await svc.ChangeStageAsync(progressId, userId, Stage.InProgress);
+            await svc.CloseAsync(closedId, userId, CloseReason.Resolved);
+
+            var stageCounts = await svc.GetStageCountsAsync(userId);
+            stageCounts.Total.Should().Be(3);
+            stageCounts.Open.Should().Be(1);
+            stageCounts.InProgress.Should().Be(1);
+            stageCounts.AwaitingParts.Should().Be(0);
+            stageCounts.Closed.Should().Be(1);
+
+            var priorityCounts = await svc.GetPriorityCountsAsync(userId);
+            priorityCounts.High.Should().Be(1);
+            priorityCounts.Medium.Should().Be(1);
+            priorityCounts.Low.Should().Be(1);
+        }
+
     }
 }

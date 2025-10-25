@@ -169,5 +169,67 @@ namespace Trackit.Data.Repositories
             });
         }
 
+        // List all WorkOrders created by a specific user, ordered by closed status and due date.
+        public async Task<IReadOnlyList<WorkOrder>> ListByUserAsync(int creatorUserId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                            SELECT
+                                Id,
+                                CreatorUserId,
+                                Summary,
+                                Details,
+                                DueAtUtc,
+                                Priority,
+                                Stage,
+                                Closed,
+                                ClosedAtUtc,
+                                ClosedReason,
+                                CreatedAtUtc,
+                                UpdatedAtUtc
+                            FROM WorkOrders
+                            WHERE CreatorUserId = @u
+                            ORDER BY Closed ASC, DueAtUtc ASC;";
+
+            using var conn = _factory.Create();
+            var rows = await conn.QueryAsync<WorkOrderRow>(
+                new CommandDefinition(sql, new { u = creatorUserId }, cancellationToken: ct));
+
+            return rows.Select(r => r.ToDomain()).ToList();
+        }
+
+    }
+
+    // Internal class representing a row in the WorkOrders table for ListByUserAsync method.
+    file sealed class WorkOrderRow
+    {
+        public long Id { get; init; }
+        public int CreatorUserId { get; init; }
+        public string Summary { get; init; } = null!;
+        public string? Details { get; init; }
+        public string DueAtUtc { get; init; } = null!;
+        public int Priority { get; init; }
+        public int Stage { get; init; }
+        public int Closed { get; init; }
+        public string? ClosedAtUtc { get; init; }
+        public int? ClosedReason { get; init; }
+        public string CreatedAtUtc { get; init; } = null!;
+        public string UpdatedAtUtc { get; init; } = null!;
+
+        public WorkOrder ToDomain() => new()
+        {
+            Id = checked((int)Id),
+            CreatorUserId = CreatorUserId,
+            Summary = Summary,
+            Details = Details,
+            DueAtUtc = DateTimeOffset.Parse(DueAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
+            Priority = (Priority)Priority,
+            Stage = (Stage)Stage,
+            Closed = Closed != 0,
+            ClosedAtUtc = ClosedAtUtc is null ? null :
+                DateTimeOffset.Parse(ClosedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
+            ClosedReason = ClosedReason is null ? null : (CloseReason)ClosedReason.Value,
+            CreatedAtUtc = DateTimeOffset.Parse(CreatedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind),
+            UpdatedAtUtc = DateTimeOffset.Parse(UpdatedAtUtc, null, System.Globalization.DateTimeStyles.RoundtripKind)
+        };
     }
 }
