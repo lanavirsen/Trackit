@@ -2,7 +2,7 @@
 using FluentAssertions;
 using Trackit.Core.Auth;
 using Trackit.Core.Services;
-using Trackit.Data.Repositories;
+using Trackit.Tests.TestDoubles;
 using Xunit;
 
 namespace Trackit.Tests

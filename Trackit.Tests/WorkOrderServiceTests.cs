@@ -8,6 +8,7 @@ using Trackit.Core.Services;
 using Trackit.Core.Ports;
 using Trackit.Data.Repositories;
 using Trackit.Data.Sqlite;
+using Trackit.Tests.TestDoubles;
 using Xunit;
 
 namespace Trackit.Tests

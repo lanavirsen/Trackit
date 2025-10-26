@@ -1,7 +1,7 @@
 ﻿using System.Threading.Tasks;
 using Trackit.Core.Domain;
 using Trackit.Core.Services;
-using Trackit.Data.Repositories;
+using Trackit.Tests.TestDoubles;
 using Xunit;
 
 public class UserTwoFactorManagerTests
