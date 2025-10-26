@@ -1,10 +1,39 @@
 # Trackit
 
-# Work in Progress
+Trackit is a terminal-based helpdesk demo for managing work orders with secure login, optional two-factor authentication, and on-demand due-date reminders.
 
-Console-based task management system (SQLite, Dapper, Spectre.Console).  
+I built it as a study project to simulate a small real-world backend.
 
-Implements login, reminders, and reports.
+## Features
 
+- User registration, login, and optional 2FA (TOTP)
+- Work orders with priorities and lifecycle stages
+- On-demand due-soon email notifications via Resend email API
+- Stage and priority summary reports
+- Console UI powered by Spectre.Console
 
+## Design and technical choices
+
+This project uses **.NET 9 with C#** for its async-friendly I/O model and type safety, **SQLite** as a local relational database, and **Dapper** as a lightweight mapper.
+
+Passwords are hashed with **PBKDF2** (random 32-byte salt, 100 000 iterations), and two-factor authentication follows the **TOTP** standard, compatible with any authenticator app. For due-date reminders I used **Resend**, a minimal REST API for sending emails.
+
+Internally, everything runs asynchronously - database access, email, and TOTP verification - to keep the CLI responsive. The notification workflow logs each reminder to ensure idempotence, preventing the same message from being sent twice. In-memory repository doubles simulate persistence without touching SQLite, keeping tests fast and isolated.
+
+## Run
+
+```bash
+dotnet restore
+dotnet run --project Trackit.Cli
+```
+
+Set `RESEND_API_KEY` and `RESEND_FROM` environment variables if you want email notifications to work.
+
+The first run automatically creates a local SQLite database under your user data folder.
+
+## Test
+
+```bash
+dotnet test
+```
 
