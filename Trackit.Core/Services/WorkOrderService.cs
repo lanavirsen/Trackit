@@ -9,7 +9,7 @@ namespace Trackit.Core.Services
     {
         private readonly IWorkOrderRepository _repo;
         private readonly Func<DateTimeOffset> _nowUtc;
-        private readonly IEmailSender? _email;
+        private readonly INotificationService? _notifications;
 
         private const int SummaryMax = 200;
         private const int DetailsMax = 4000;
@@ -29,11 +29,11 @@ namespace Trackit.Core.Services
         }
 
         // Constructor accepting a repository and an optional function to get the current UTC time.
-        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null, IEmailSender? email = null)
+        public WorkOrderService(IWorkOrderRepository repo, Func<DateTimeOffset>? nowUtc = null, INotificationService? notifications = null)
         {
             _repo = repo;
             _nowUtc = nowUtc ?? (() => DateTimeOffset.UtcNow);
-            _email = email;
+            _notifications = notifications;
         }
 
         // Suggests a priority level based on the due date.
@@ -122,11 +122,11 @@ namespace Trackit.Core.Services
             };
             await _repo.UpdateAsync(updated, ct);
         }
-        // Idempotent due-soon notifications using NotificationLog and IEmailSender.
+        // Idempotent due-soon notifications using NotificationLog and INotificationService.
         public async Task<IReadOnlyList<DueSoonItem>> SendDueNotificationsAsync(int userId, string toEmail, TimeSpan window, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(toEmail)) throw new ArgumentException("Recipient email required.", nameof(toEmail));
-            if (_email is null) throw new InvalidOperationException("Email sender not configured.");
+            if (_notifications is null) throw new InvalidOperationException("Email sender not configured.");
             if (window <= TimeSpan.Zero) throw new ArgumentOutOfRangeException(nameof(window), "Window must be positive.");
 
             var now = _nowUtc();
@@ -137,13 +137,7 @@ namespace Trackit.Core.Services
             foreach (var item in items)
             {
                 var localDue = item.DueAtUtc.ToLocalTime();
-                var subject = $"Due soon: {item.Summary} ({localDue:yyyy-MM-dd HH:mm})";
-                var html = $@"<h3>Work order due soon</h3>
-                              <p><strong>{System.Net.WebUtility.HtmlEncode(item.Summary)}</strong></p>
-                              <p>Priority: {item.Priority}</p>
-                              <p>Due (local): {localDue:yyyy-MM-dd HH:mm}</p>";
-
-                await _email.SendEmailAsync(toEmail, subject, html, null, ct);
+                await _notifications.SendWorkOrderDueNotificationAsync(toEmail, item.Summary, localDue, ct);
                 await _repo.AddNotificationLogAsync(item.Id, windowTag, now, ct);
             }
             return items;

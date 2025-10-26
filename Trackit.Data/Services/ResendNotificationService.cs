@@ -1,52 +1,51 @@
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Trackit.Core.Ports;
 
 namespace Trackit.Data.Services
 {
-    // Resend implementation of the notification service.
     public sealed class ResendNotificationService : INotificationService
     {
         private readonly HttpClient _httpClient;
-        private readonly string _apiKey;
         private readonly string _fromEmail;
 
-        public ResendNotificationService(string apiKey, string fromEmail = "onboarding@resend.dev")
+        public ResendNotificationService(string apiKey, string fromEmail = "onboarding@resend.dev", HttpClient? httpClient = null)
         {
-            _httpClient = new HttpClient();
-            _apiKey = apiKey;
+            _httpClient = httpClient ?? new HttpClient();
             _fromEmail = fromEmail;
-            
-            // Set up the API key in headers.
-            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {_apiKey}");
+
+            _httpClient.DefaultRequestHeaders.Remove("Authorization");
+            _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
         }
 
-        // Sends a generic email.
         public async Task SendEmailAsync(string to, string subject, string htmlContent, string? textContent = null, CancellationToken ct = default)
         {
-            // Prepare the email payload.
-            var emailData = new
+            var emailData = new Dictionary<string, object>
             {
-                from = _fromEmail,
-                to = new[] { to },
-                subject = subject,
-                html = htmlContent
+                ["from"] = _fromEmail,
+                ["to"] = new[] { to },
+                ["subject"] = subject,
+                ["html"] = htmlContent
             };
+
+            if (!string.IsNullOrWhiteSpace(textContent))
+            {
+                emailData["text"] = textContent;
+            }
 
             var json = JsonSerializer.Serialize(emailData);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-            // `using` avoids memory pressure and socket leaks when the notifier runs repeatedly (for example, sending many due notifications).
             using var response = await _httpClient.PostAsync("https://api.resend.com/emails", content, ct);
-            
+
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(ct);
-                Console.WriteLine($"Error: {errorContent}");
-                throw new Exception($"Failed to send email: {response.StatusCode} - {errorContent}");
+                throw new HttpRequestException($"Resend email failed: {response.StatusCode} - {errorContent}");
             }
-            
-            Console.WriteLine("Email sent successfully!");
         }
 
         public async Task SendWorkOrderDueNotificationAsync(string userEmail, string workOrderSummary, DateTimeOffset dueDate, CancellationToken ct = default)

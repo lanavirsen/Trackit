@@ -2,7 +2,6 @@ using System;
 using Spectre.Console;
 using Trackit.Core.Domain;
 using Trackit.Core.Services;
-using Trackit.Core.Ports;
 
 namespace Trackit.Cli.Ui
 {
@@ -14,17 +13,17 @@ namespace Trackit.Cli.Ui
         private int? _currentUserId;
         private string? _currentUsername;
         private string? _currentUserEmail;
-        private readonly IEmailSender _emailSender;
         private readonly UserTwoFactorManager _tfa;
+        private readonly TotpService _totp;
         private bool _twoFactorEnabled;
 
         // Constructor accepting user and work order services.
-        public UiShell(UserService users, WorkOrderService work, IEmailSender emailSender, UserTwoFactorManager tfa)
+        public UiShell(UserService users, WorkOrderService work, UserTwoFactorManager tfa, TotpService totp)
         {
             _users = users;
             _work = work;
-            _emailSender = emailSender;
             _tfa = tfa;
+            _totp = totp;
         }
 
         // Main loop to run the CLI application.
@@ -60,15 +59,23 @@ namespace Trackit.Cli.Ui
         // Register a new user by prompting for username, email, and password.
         private async Task RegisterAsync()
         {
-            var username = AnsiConsole.Ask<string>("Username:");
-            var email = AnsiConsole.Prompt(new TextPrompt<string>("Email (optional):").AllowEmpty());
-            var password = AnsiConsole.Prompt(new TextPrompt<string>("Password:").Secret()
-                .Validate(p => PasswordPolicy(p) ? ValidationResult.Success() :
-                    ValidationResult.Error("[red]Min 6 chars, 1 digit, 1 upper, 1 special[/]")));
-
-            // Attempt to register the user and handle any errors.
             try
             {
+                var username = AnsiConsole.Ask<string>("Username:");
+
+                if (await _users.UsernameExistsAsync(username))
+                {
+                    AnsiConsole.MarkupLine("[red]That username is already taken. Try another.[/]");
+                    await Task.Delay(1500);
+                    return;
+                }
+
+                var email = AnsiConsole.Prompt(new TextPrompt<string>("Email (optional):").AllowEmpty());
+                var password = AnsiConsole.Prompt(new TextPrompt<string>("Password:").Secret()
+                    .Validate(p => PasswordPolicy(p) ? ValidationResult.Success() :
+                        ValidationResult.Error("[red]Min 6 chars, 1 digit, 1 upper, 1 special[/]")));
+
+                // Attempt to register the user and handle any errors.
                 await AnsiConsole.Status().StartAsync("Creating user...", async _ =>
                 {
                     await _users.RegisterAsync(username, string.IsNullOrWhiteSpace(email) ? null : email, password);
@@ -100,8 +107,7 @@ namespace Trackit.Cli.Ui
             if (user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TotpSecret))
             {
                 var code = AnsiConsole.Prompt(new TextPrompt<string>("Enter 6-digit TOTP code:").Secret());
-                var totp = new TotpService();
-                var ok = totp.VerifyCode(user.TotpSecret, code, allowedDriftSteps: 1);
+                var ok = _totp.VerifyCode(user.TotpSecret, code, allowedDriftSteps: 1);
                 if (!ok)
                 {
                     AnsiConsole.MarkupLine("[red]Invalid or expired TOTP code.[/]");
@@ -531,9 +537,8 @@ namespace Trackit.Cli.Ui
         {
             if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return false; }
 
-            var totp = new TotpService();
-            var secret = totp.GenerateSecret();
-            var uri = totp.BuildUri("Trackit", _currentUsername ?? $"user{_currentUserId}", secret);
+            var secret = _totp.GenerateSecret();
+            var uri = _totp.BuildUri("Trackit", _currentUsername ?? $"user{_currentUserId}", secret);
 
             AnsiConsole.MarkupLine($"[yellow]TOTP secret:[/] {secret}");
             AnsiConsole.MarkupLine($"[yellow]URI:[/] {uri}");
@@ -553,7 +558,7 @@ namespace Trackit.Cli.Ui
                     return false;
                 }
 
-                if (totp.VerifyCode(secret, code, allowedDriftSteps: 1))
+                if (_totp.VerifyCode(secret, code, allowedDriftSteps: 1))
                 {
                     await _tfa.EnableAsync(_currentUserId.Value, secret);
                     AnsiConsole.MarkupLine("[green]2FA enabled.[/]");

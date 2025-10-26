@@ -1,4 +1,6 @@
-﻿using Trackit.Core.Domain;
+﻿using System.Threading;
+using System.Threading.Tasks;
+using Trackit.Core.Domain;
 using Trackit.Core.Ports;
 
 namespace Trackit.Core.Services
@@ -6,12 +8,10 @@ namespace Trackit.Core.Services
     public sealed class UserTwoFactorManager
     {
         private readonly IUserRepository _repo;
-        private readonly TotpService _totp;
 
-        public UserTwoFactorManager(IUserRepository repo, TotpService totp)
+        public UserTwoFactorManager(IUserRepository repo)
         {
             _repo = repo;
-            _totp = totp;
         }
 
         // Persist after verification

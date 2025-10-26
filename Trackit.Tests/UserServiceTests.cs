@@ -36,6 +36,16 @@ namespace Trackit.Tests
         }
 
         [Fact]
+        public async Task Username_exists_async_detects_duplicates()
+        {
+            var svc = NewSvc();
+            await svc.RegisterAsync("lana", null, "P@ssw0rd!");
+
+            var exists = await svc.UsernameExistsAsync("LANA");
+            exists.Should().BeTrue();
+        }
+
+        [Fact]
         public async Task Whitespace_password_is_rejected()
         {
             var svc = NewSvc();

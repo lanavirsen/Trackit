@@ -1,11 +1,9 @@
-﻿using System.Net.Http;
-using Trackit.Cli.Ui;
+﻿using Trackit.Cli.Ui;
 using Trackit.Core.Auth;
 using Trackit.Core.Services;
 using Trackit.Data.Repositories;
 using Trackit.Data.Services;
 using Trackit.Data.Sqlite;
-using Trackit.Cli.Infrastructure;
 
 namespace Trackit.Cli
 {
@@ -31,20 +29,19 @@ namespace Trackit.Cli
             var hasher = new PasswordHasher();
             var userSvc = new UserService(userRepo, hasher);
 
-            // Email sender setup (IEmailSender, used by WorkOrderService).
+            // Email sender setup (used by WorkOrderService).
             var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY") ?? "";
             var resendFrom = Environment.GetEnvironmentVariable("RESEND_FROM") ?? "onboarding@resend.dev"; // fallback for local tests
-            
-            var httpClient = new HttpClient();
-            var emailSender = new ResendEmailSender(httpClient, resendApiKey, resendFrom);
+
+            var notificationService = new ResendNotificationService(resendApiKey, resendFrom);
 
             // Work order service setup.
-            var workSvc = new WorkOrderService(workRepo, null, emailSender);
+            var workSvc = new WorkOrderService(workRepo, null, notificationService);
 
             var totpService = new TotpService();
-            var tfaManager = new UserTwoFactorManager(userRepo, new TotpService());
+            var tfaManager = new UserTwoFactorManager(userRepo);
 
-            var ui = new UiShell(userSvc, workSvc, emailSender, tfaManager);
+            var ui = new UiShell(userSvc, workSvc, tfaManager, totpService);
             await ui.RunAsync();
         }
     }

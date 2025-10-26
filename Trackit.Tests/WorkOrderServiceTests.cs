@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -135,27 +136,39 @@ namespace Trackit.Tests
                 CreatedAtUtc = now
             });
 
-            var email = new FakeEmailSender();
-            var svc = new WorkOrderService(workRepo, () => now, email);
+            var notifications = new FakeNotificationService();
+            var svc = new WorkOrderService(workRepo, () => now, notifications);
 
             await svc.AddAsync(userId, "Due soon", null, now.AddHours(2));
 
             var first = await svc.SendDueNotificationsAsync(userId, "lana@example.com", TimeSpan.FromHours(24));
             first.Should().HaveCount(1);
-            email.Sent.Count.Should().Be(1);
+            notifications.DueNotifications.Count.Should().Be(1);
 
             var second = await svc.SendDueNotificationsAsync(userId, "lana@example.com", TimeSpan.FromHours(24));
             second.Should().BeEmpty();
-            email.Sent.Count.Should().Be(1);
+            notifications.DueNotifications.Count.Should().Be(1);
         }
 
-        private sealed class FakeEmailSender : IEmailSender
+        private sealed class FakeNotificationService : INotificationService
         {
-            public List<(string To, string Subject, string Html)> Sent { get; } = new();
+            public List<(string To, string Subject, string Html)> Emails { get; } = new();
+            public List<(string To, string Summary, DateTimeOffset Due)> DueNotifications { get; } = new();
 
             public Task SendEmailAsync(string to, string subject, string htmlContent, string? textContent = null, CancellationToken ct = default)
             {
-                Sent.Add((to, subject, htmlContent));
+                Emails.Add((to, subject, htmlContent));
+                return Task.CompletedTask;
+            }
+
+            public Task SendWorkOrderDueNotificationAsync(string userEmail, string workOrderSummary, DateTimeOffset dueDate, CancellationToken ct = default)
+            {
+                DueNotifications.Add((userEmail, workOrderSummary, dueDate));
+                return Task.CompletedTask;
+            }
+
+            public Task Send2FAVerificationCodeAsync(string userEmail, string verificationCode, CancellationToken ct = default)
+            {
                 return Task.CompletedTask;
             }
         }

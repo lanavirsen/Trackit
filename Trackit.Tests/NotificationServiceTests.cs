@@ -1,6 +1,6 @@
+using System.Net.Http;
 using System.Threading.Tasks;
 using FluentAssertions;
-using Trackit.Core.Ports;
 using Trackit.Data.Services;
 using Xunit;
 
@@ -19,8 +19,7 @@ namespace Trackit.Tests
             var subject = "Test Subject";
             var htmlContent = "<h1>Test Email</h1>";
 
-            // Note: This will fail with test API key, but we're testing the method exists and can be called
-            await Assert.ThrowsAsync<Exception>(async () =>
+            await Assert.ThrowsAsync<HttpRequestException>(async () =>
                 await service.SendEmailAsync(to, subject, htmlContent));
         }
 
@@ -32,8 +31,7 @@ namespace Trackit.Tests
             var workOrderSummary = "Fix critical bug";
             var dueDate = new System.DateTimeOffset(2025, 1, 15, 10, 0, 0, System.TimeSpan.Zero);
 
-            // Note: This will fail with test API key, but we're testing the method exists and can be called
-            await Assert.ThrowsAsync<Exception>(async () =>
+            await Assert.ThrowsAsync<HttpRequestException>(async () =>
                 await service.SendWorkOrderDueNotificationAsync(userEmail, workOrderSummary, dueDate));
         }
 
@@ -44,8 +42,7 @@ namespace Trackit.Tests
             var userEmail = "user@example.com";
             var verificationCode = "123456";
 
-            // Note: This will fail with test API key, but we're testing the method exists and can be called
-            await Assert.ThrowsAsync<Exception>(async () =>
+            await Assert.ThrowsAsync<HttpRequestException>(async () =>
                 await service.Send2FAVerificationCodeAsync(userEmail, verificationCode));
         }
 

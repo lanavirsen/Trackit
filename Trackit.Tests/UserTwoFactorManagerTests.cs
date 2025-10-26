@@ -11,7 +11,7 @@ public class UserTwoFactorManagerTests
     {
         var repo = new InMemoryUserRepository();
         var totp = new TotpService();
-        var manager = new UserTwoFactorManager(repo, totp);
+        var manager = new UserTwoFactorManager(repo);
 
         // Create a user manually
         var user = new User

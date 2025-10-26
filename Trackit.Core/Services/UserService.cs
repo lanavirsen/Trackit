@@ -56,6 +56,13 @@ namespace Trackit.Core.Services
             return await _repo.AddAsync(user, ct);
         }
 
+        public async Task<bool> UsernameExistsAsync(string username, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username required", nameof(username));
+            var norm = Normalization.NormalizeUsername(username);
+            return await _repo.ExistsAsync(norm, ct);
+        }
+
         public async Task<LoginResult> LoginAsync(string username, string password, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))
