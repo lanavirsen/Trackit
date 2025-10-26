@@ -1,4 +1,5 @@
-﻿using Trackit.Core.Domain;
+﻿using System.Linq;
+using Trackit.Core.Domain;
 using Trackit.Core.Ports;
 
 namespace Trackit.Core.Services
@@ -122,7 +123,7 @@ namespace Trackit.Core.Services
             await _repo.UpdateAsync(updated, ct);
         }
         // Idempotent due-soon notifications using NotificationLog and IEmailSender.
-        public async Task<int> SendDueNotificationsAsync(int userId, string toEmail, TimeSpan window, CancellationToken ct = default)
+        public async Task<IReadOnlyList<DueSoonItem>> SendDueNotificationsAsync(int userId, string toEmail, TimeSpan window, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(toEmail)) throw new ArgumentException("Recipient email required.", nameof(toEmail));
             if (_email is null) throw new InvalidOperationException("Email sender not configured.");
@@ -132,9 +133,7 @@ namespace Trackit.Core.Services
             var until = now.Add(window);
             var windowTag = $"{(int)window.TotalHours}h";
 
-            var items = await _repo.ListDueSoonAsync(userId, now, until, windowTag, ct);
-            var count = 0;
-
+            var items = (await _repo.ListDueSoonAsync(userId, now, until, windowTag, ct)).ToList();
             foreach (var item in items)
             {
                 var localDue = item.DueAtUtc.ToLocalTime();
@@ -146,9 +145,8 @@ namespace Trackit.Core.Services
 
                 await _email.SendEmailAsync(toEmail, subject, html, null, ct);
                 await _repo.AddNotificationLogAsync(item.Id, windowTag, now, ct);
-                count++;
             }
-            return count;
+            return items;
         }
 
         // Aggregate counts of work orders by stage for a specific user.

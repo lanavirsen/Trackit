@@ -1,4 +1,5 @@
-﻿using Dapper;
+﻿using System.Data;
+using Dapper;
 using Trackit.Core.Domain;
 using Trackit.Core.Ports;
 using Trackit.Data.Sqlite;
@@ -18,9 +19,9 @@ namespace Trackit.Data.Repositories
         public async Task<int> AddAsync(WorkOrder wo, CancellationToken ct = default)
         {
             const string sql = @"
-                            INSERT INTO WorkOrders (CreatorUserId, Summary, Details, DueAtUtc, Priority, Stage, Closed, ClosedAtUtc, ClosedReason, CreatedAtUtc, UpdatedAtUtc)
-                            VALUES (@CreatorUserId, @Summary, @Details, @DueAtUtc, @Priority, @Stage, @Closed, @ClosedAtUtc, @ClosedReason, @CreatedAtUtc, @UpdatedAtUtc);
-                            SELECT last_insert_rowid();";
+INSERT INTO WorkOrders (CreatorUserId, Summary, Details, DueAtUtc, Priority, Stage, Closed, ClosedAtUtc, ClosedReason, CreatedAtUtc, UpdatedAtUtc)
+VALUES (@CreatorUserId, @Summary, @Details, @DueAtUtc, @Priority, @Stage, @Closed, @ClosedAtUtc, @ClosedReason, @CreatedAtUtc, @UpdatedAtUtc);
+SELECT last_insert_rowid();";
             using var conn = _factory.Create();
             var id = await conn.ExecuteScalarAsync<long>(sql, ToRow(wo));
             return checked((int)id);
@@ -137,6 +138,7 @@ namespace Trackit.Data.Repositories
                             ORDER BY w.DueAtUtc ASC;";
 
             using var conn = _factory.Create();
+            await EnsureNotificationLogTableAsync(conn, ct);
             var rows = await conn.QueryAsync(sql, new
             {
                 u = userId,
@@ -161,6 +163,7 @@ namespace Trackit.Data.Repositories
             const string sql = @"INSERT OR IGNORE INTO NotificationLog(WorkOrderId, WindowTag, SentAtUtc)
                              VALUES(@id, @tag, @sentAt);";
             using var conn = _factory.Create();
+            await EnsureNotificationLogTableAsync(conn, ct);
             await conn.ExecuteAsync(sql, new
             {
                 id = workOrderId,
@@ -196,6 +199,19 @@ namespace Trackit.Data.Repositories
 
             return rows.Select(r => r.ToDomain()).ToList();
         }
+
+        private static readonly string NotificationLogTableSql = @"
+CREATE TABLE IF NOT EXISTS NotificationLog (
+  Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  WorkOrderId   INTEGER NOT NULL,
+  WindowTag     TEXT NOT NULL,
+  SentAtUtc     TEXT NOT NULL,
+  UNIQUE (WorkOrderId, WindowTag),
+  FOREIGN KEY (WorkOrderId) REFERENCES WorkOrders(Id) ON DELETE CASCADE
+);";
+
+        private static Task EnsureNotificationLogTableAsync(IDbConnection conn, CancellationToken ct)
+            => conn.ExecuteAsync(new CommandDefinition(NotificationLogTableSql, cancellationToken: ct));
 
     }
 

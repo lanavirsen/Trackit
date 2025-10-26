@@ -1,3 +1,4 @@
+using System;
 using Spectre.Console;
 using Trackit.Core.Domain;
 using Trackit.Core.Services;
@@ -469,27 +470,56 @@ namespace Trackit.Cli.Ui
 
             try
             {
-                int sent = 0;
+                IReadOnlyList<DueSoonItem> sentItems = Array.Empty<DueSoonItem>();
                 await AnsiConsole.Status()
                     .StartAsync("Checking due items and sending emails...", async _ =>
                     {
-                        sent = await _work.SendDueNotificationsAsync(_currentUserId.Value, _currentUserEmail!, TimeSpan.FromHours(24));
+                        sentItems = await _work.SendDueNotificationsAsync(_currentUserId.Value, _currentUserEmail!, TimeSpan.FromHours(24));
                     });
 
-                var ts = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm");
-                var color = sent > 0 ? "green" : "grey";
-                var msg = sent > 0
-                    ? $"[bold]{sent}[/] notification(s) sent."
-                    : "No notifications to send (idempotent: none pending).";
+                RenderHeader();
 
-                var panel = new Panel(new Markup($"{msg}\n[dim]{ts}[/]"))
+                if (sentItems.Count == 0)
                 {
-                    Header = new PanelHeader("Due check (24h)", Justify.Center),
-                    Border = BoxBorder.Rounded
-                };
-                AnsiConsole.Write(panel);
-                // brief pause so the message stays visible before returning to the menu
-                await Task.Delay(3000);
+                    var ts = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm");
+                    var panel = new Panel(new Markup("No notifications to send.\n[dim]" + ts + "[/]"))
+                    {
+                        Header = new PanelHeader("Due check (24h)", Justify.Center),
+                        Border = BoxBorder.Rounded
+                    };
+                    AnsiConsole.Write(panel);
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[bold underline]Due notifications sent[/]");
+                    var table = new Table().Border(TableBorder.Rounded);
+                    table.AddColumn("Id");
+                    table.AddColumn("Summary");
+                    table.AddColumn("Due (local)");
+                    table.AddColumn("Priority");
+
+                    foreach (var item in sentItems)
+                    {
+                        var local = item.DueAtUtc.ToLocalTime();
+                        var prio = item.Priority switch
+                        {
+                            Priority.High => "[red]High[/]",
+                            Priority.Medium => "[yellow]Medium[/]",
+                            _ => "[green]Low[/]"
+                        };
+                        table.AddRow(
+                            item.Id.ToString(),
+                            Escape(item.Summary),
+                            $"{local:yyyy-MM-dd HH:mm}",
+                            prio);
+                    }
+
+                    AnsiConsole.Write(table);
+                }
+
+                AnsiConsole.WriteLine();
+                AnsiConsole.MarkupLine("[grey]Press any key to return...[/]");
+                Console.ReadKey(intercept: true);
             }
             catch (HttpRequestException ex)
             {

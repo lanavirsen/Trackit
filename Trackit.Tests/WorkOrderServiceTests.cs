@@ -1,8 +1,10 @@
-﻿using System.IO;
+﻿using System.Collections.Generic;
+using System.IO;
 using System.Threading.Tasks;
 using FluentAssertions;
 using Trackit.Core.Domain;
 using Trackit.Core.Services;
+using Trackit.Core.Ports;
 using Trackit.Data.Repositories;
 using Trackit.Data.Sqlite;
 using Xunit;
@@ -111,6 +113,51 @@ namespace Trackit.Tests
             priorityCounts.High.Should().Be(1);
             priorityCounts.Medium.Should().Be(1);
             priorityCounts.Low.Should().Be(1);
+        }
+
+        [Fact]
+        public async Task SendDueNotifications_sends_and_is_idempotent()
+        {
+            var now = DateTimeOffset.Parse("2025-10-10T00:00:00Z");
+            var db = Path.GetTempFileName();
+            var factory = new DapperConnectionFactory($"Data Source={db};Cache=Shared;");
+            await DbBootstrap.EnsureCreatedAsync(factory);
+
+            var userRepo = new SqliteUserRepository(factory);
+            var workRepo = new SqliteWorkOrderRepository(factory);
+
+            var userId = await userRepo.AddAsync(new Trackit.Core.Domain.User
+            {
+                Username = "lana",
+                Email = "lana@example.com",
+                PasswordHash = new byte[] { 1 },
+                PasswordSalt = new byte[] { 2 },
+                CreatedAtUtc = now
+            });
+
+            var email = new FakeEmailSender();
+            var svc = new WorkOrderService(workRepo, () => now, email);
+
+            await svc.AddAsync(userId, "Due soon", null, now.AddHours(2));
+
+            var first = await svc.SendDueNotificationsAsync(userId, "lana@example.com", TimeSpan.FromHours(24));
+            first.Should().HaveCount(1);
+            email.Sent.Count.Should().Be(1);
+
+            var second = await svc.SendDueNotificationsAsync(userId, "lana@example.com", TimeSpan.FromHours(24));
+            second.Should().BeEmpty();
+            email.Sent.Count.Should().Be(1);
+        }
+
+        private sealed class FakeEmailSender : IEmailSender
+        {
+            public List<(string To, string Subject, string Html)> Sent { get; } = new();
+
+            public Task SendEmailAsync(string to, string subject, string htmlContent, string? textContent = null, CancellationToken ct = default)
+            {
+                Sent.Add((to, subject, htmlContent));
+                return Task.CompletedTask;
+            }
         }
 
     }
