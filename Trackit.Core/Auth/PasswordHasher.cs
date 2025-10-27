@@ -9,7 +9,6 @@ namespace Trackit.Core.Auth
         private const int HashLen = 32;
 
         // Implement secure password hashing and verification using PBKDF2.
-
         public (byte[] Hash, byte[] Salt) Hash(string password)
         {
             if (password is null) throw new ArgumentNullException(nameof(password)); // validate input.
@@ -25,6 +24,7 @@ namespace Trackit.Core.Auth
             // (Can't verify later without the original salt.)
         }
 
+        // Verify a password against a stored hash and salt.
         public bool Verify(string password, byte[] hash, byte[] salt)
         {
             // Validate inputs.

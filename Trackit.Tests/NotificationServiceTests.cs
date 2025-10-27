@@ -8,6 +8,7 @@ namespace Trackit.Tests
 {
     public class NotificationServiceTests
     {
+        // Helper method to create a new instance of ResendNotificationService.
         private static ResendNotificationService NewService() =>
             new("test_api_key", "test@example.com");
 

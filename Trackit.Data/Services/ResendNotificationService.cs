@@ -8,11 +8,16 @@ using Trackit.Core.Ports;
 
 namespace Trackit.Data.Services
 {
+    // Implementation of INotificationService using Resend email service.
     public sealed class ResendNotificationService : INotificationService
     {
+        // HttpClient instance for making API requests.
         private readonly HttpClient _httpClient;
+
+        // Default sender email address.
         private readonly string _fromEmail;
 
+        // Constructor accepting API key and optional HttpClient.
         public ResendNotificationService(string apiKey, string fromEmail = "onboarding@resend.dev", HttpClient? httpClient = null)
         {
             _httpClient = httpClient ?? new HttpClient();
@@ -22,8 +27,10 @@ namespace Trackit.Data.Services
             _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
         }
 
+        // Sends a generic email using the Resend API.
         public async Task SendEmailAsync(string to, string subject, string htmlContent, string? textContent = null, CancellationToken ct = default)
         {
+            // Prepare the email data payload.
             var emailData = new Dictionary<string, object>
             {
                 ["from"] = _fromEmail,
@@ -32,15 +39,19 @@ namespace Trackit.Data.Services
                 ["html"] = htmlContent
             };
 
+            // Include text content if provided.
             if (!string.IsNullOrWhiteSpace(textContent))
             {
                 emailData["text"] = textContent;
             }
 
+            // Serialize the payload to JSON and send the POST request.
+            // We use JSON because Resend API expects JSON formatted data.
             var json = JsonSerializer.Serialize(emailData);
             using var content = new StringContent(json, Encoding.UTF8, "application/json");
             using var response = await _httpClient.PostAsync("https://api.resend.com/emails", content, ct);
 
+            // Handle unsuccessful responses.
             if (!response.IsSuccessStatusCode)
             {
                 var errorContent = await response.Content.ReadAsStringAsync(ct);
@@ -48,11 +59,14 @@ namespace Trackit.Data.Services
             }
         }
 
+        // Sends a work order due notification email.
         public async Task SendWorkOrderDueNotificationAsync(string userEmail, string workOrderSummary, DateTimeOffset dueDate, CancellationToken ct = default)
         {
+            // Prepare email subject and formatted due date.
             var subject = "Work Order Due Soon - Trackit";
             var dueDateFormatted = dueDate.ToString("yyyy-MM-dd HH:mm");
-            
+
+            // Prepare HTML content.
             var htmlContent = $@"
                 <html>
                 <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
@@ -71,27 +85,31 @@ namespace Trackit.Data.Services
                 </body>
                 </html>";
 
+            // Plain text version of the email.
             var textContent = $@"
-Work Order Due Soon - Trackit
+                            Work Order Due Soon - Trackit
 
-Hello,
+                            Hello,
 
-This is a reminder that you have a work order due soon:
+                            This is a reminder that you have a work order due soon:
 
-Work Order: {workOrderSummary}
-Due Date: {dueDateFormatted}
+                            Work Order: {workOrderSummary}
+                            Due Date: {dueDateFormatted}
 
-Please log into Trackit to view and manage your work orders.
+                            Please log into Trackit to view and manage your work orders.
 
-This is an automated notification from Trackit.";
+                            This is an automated notification from Trackit.";
 
+            // Send the email using the generic method.
             await SendEmailAsync(userEmail, subject, htmlContent, textContent, ct);
         }
 
+        // Sends a two-factor authentication verification code email.
         public async Task Send2FAVerificationCodeAsync(string userEmail, string verificationCode, CancellationToken ct = default)
         {
             var subject = "Your Trackit Verification Code";
-            
+
+            // Prepare HTML content.
             var htmlContent = $@"
                 <html>
                 <body style='font-family: Arial, sans-serif; line-height: 1.6; color: #333;'>
@@ -110,21 +128,23 @@ This is an automated notification from Trackit.";
                 </body>
                 </html>";
 
+            // Plain text version of the email.
             var textContent = $@"
-Two-Factor Authentication - Trackit
+                Two-Factor Authentication - Trackit
 
-Hello,
+                Hello,
 
-You requested a verification code for your Trackit account. Use the code below to complete your login:
+                You requested a verification code for your Trackit account. Use the code below to complete your login:
 
-Verification Code: {verificationCode}
+                Verification Code: {verificationCode}
 
-This code will expire in 10 minutes.
+                This code will expire in 10 minutes.
 
-If you didn't request this code, please ignore this email.
+                If you didn't request this code, please ignore this email.
 
-This is an automated message from Trackit.";
+                This is an automated message from Trackit.";
 
+            // Send the email using the generic method.
             await SendEmailAsync(userEmail, subject, htmlContent, textContent, ct);
         }
     }

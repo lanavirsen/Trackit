@@ -151,6 +151,7 @@ namespace Trackit.Tests
             notifications.DueNotifications.Count.Should().Be(1);
         }
 
+        // A fake implementation of INotificationService for testing purposes.
         private sealed class FakeNotificationService : INotificationService
         {
             public List<(string To, string Subject, string Html)> Emails { get; } = new();

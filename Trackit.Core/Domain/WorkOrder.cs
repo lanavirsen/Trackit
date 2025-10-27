@@ -1,5 +1,6 @@
 ﻿namespace Trackit.Core.Domain
 {
+    // WorkOrder represents a task or job to be completed.
     public sealed record WorkOrder
     {
         public int Id { get; init; }

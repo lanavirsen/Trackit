@@ -639,6 +639,7 @@ namespace Trackit.Cli.Ui
 
             RenderHeader();
 
+            // Fetch statistics.
             var userId = _currentUserId!.Value;
 
             var stageCounts = await _work.GetStageCountsAsync(userId);
@@ -648,9 +649,11 @@ namespace Trackit.Cli.Ui
             AnsiConsole.MarkupLine("[bold underline]Workspace Snapshot[/]");
             AnsiConsole.WriteLine();
 
+            // Unpack tuples for easier access.
             var (total, open, inProgress, awaitingParts, closed) = stageCounts;
             var (high, medium, low) = priorityCounts;
 
+            // Build and display tables.
             var stageTable = new Table()
                 .Border(TableBorder.Rounded)
                 .Title("Stage Breakdown");
@@ -674,12 +677,14 @@ namespace Trackit.Cli.Ui
             AnsiConsole.Write(new Columns(stageTable, priorityTable).Expand());
             AnsiConsole.WriteLine();
 
+            // Due status summary.
             var now = DateTimeOffset.UtcNow;
             var overdue = openItems.Count(w => w.DueAtUtc < now);
             var dueSoon = openItems.Count(w => w.DueAtUtc >= now && w.DueAtUtc <= now.AddHours(24));
             AnsiConsole.MarkupLine($"[red]Overdue:[/] {overdue}    [yellow]Due <=24h:[/] {dueSoon}    [green]Open backlog:[/] {open}");
             AnsiConsole.WriteLine();
 
+            // List open work orders or show a message if none exist.
             if (openItems.Count == 0)
                 AnsiConsole.MarkupLine("[grey]No open work orders yet. Add one from the workspace menu.[/]");
 
@@ -698,7 +703,7 @@ namespace Trackit.Cli.Ui
             return hasDigit && hasUpper && hasSpecial;
         }
 
-        // Header renderer
+        // Header renderer.
         private void RenderHeader()
         {
             AnsiConsole.Clear();
@@ -711,7 +716,7 @@ namespace Trackit.Cli.Ui
         // Escape a string for safe markup display.
         private static string Escape(string s) => Markup.Escape(s);
 
-        // �Press Enter to cancel� helper.
+        // "Press Enter to cancel" helper.
         private static void PrintCancelHint() =>
             AnsiConsole.MarkupLine("[grey]Press Enter to cancel[/]");
 

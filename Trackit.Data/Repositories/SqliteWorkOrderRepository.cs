@@ -147,6 +147,7 @@ SELECT last_insert_rowid();";
                 untilUtc = untilUtc.UtcDateTime.ToString("O")
             });
 
+            // Map the query results to DueSoonItem objects.
             var list = new List<DueSoonItem>();
             foreach (var r in rows)
                 list.Add(new DueSoonItem(
@@ -193,23 +194,27 @@ SELECT last_insert_rowid();";
                             WHERE CreatorUserId = @u
                             ORDER BY Closed ASC, DueAtUtc ASC;";
 
+            // Query the database and map results to WorkOrder domain objects.
             using var conn = _factory.Create();
             var rows = await conn.QueryAsync<WorkOrderRow>(
                 new CommandDefinition(sql, new { u = creatorUserId }, cancellationToken: ct));
 
+            // Convert each WorkOrderRow to a WorkOrder and return as a list.
             return rows.Select(r => r.ToDomain()).ToList();
         }
 
+        // SQL statement to create the NotificationLog table if it does not exist.
         private static readonly string NotificationLogTableSql = @"
-CREATE TABLE IF NOT EXISTS NotificationLog (
-  Id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  WorkOrderId   INTEGER NOT NULL,
-  WindowTag     TEXT NOT NULL,
-  SentAtUtc     TEXT NOT NULL,
-  UNIQUE (WorkOrderId, WindowTag),
-  FOREIGN KEY (WorkOrderId) REFERENCES WorkOrders(Id) ON DELETE CASCADE
-);";
+                                        CREATE TABLE IF NOT EXISTS NotificationLog (
+                                          Id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                                          WorkOrderId   INTEGER NOT NULL,
+                                          WindowTag     TEXT NOT NULL,
+                                          SentAtUtc     TEXT NOT NULL,
+                                          UNIQUE (WorkOrderId, WindowTag),
+                                          FOREIGN KEY (WorkOrderId) REFERENCES WorkOrders(Id) ON DELETE CASCADE
+                                        );";
 
+        // Ensure that the NotificationLog table exists in the database.
         private static Task EnsureNotificationLogTableAsync(IDbConnection conn, CancellationToken ct)
             => conn.ExecuteAsync(new CommandDefinition(NotificationLogTableSql, cancellationToken: ct));
 
@@ -231,6 +236,7 @@ CREATE TABLE IF NOT EXISTS NotificationLog (
         public string CreatedAtUtc { get; init; } = null!;
         public string UpdatedAtUtc { get; init; } = null!;
 
+        // Convert this WorkOrderRow to a WorkOrder domain object.
         public WorkOrder ToDomain() => new()
         {
             Id = checked((int)Id),

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace Trackit.Core.Domain
 {
+    // User entity representing a user account in the system.
     public sealed class User // sealed → cannot be inherited.
     {
         /*

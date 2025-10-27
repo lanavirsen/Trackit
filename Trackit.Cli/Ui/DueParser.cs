@@ -14,7 +14,7 @@ namespace Trackit.Cli.Ui
 
     public static class DueParser
     {
-        // Try to parse relaxed user input into UTC
+        // Try to parse relaxed user input into UTC.
         public static bool TryParseToUtc(string input, out DateTimeOffset dueUtc)
         {
             input = (input ?? "").Trim().ToLowerInvariant();

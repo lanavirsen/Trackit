@@ -5,16 +5,19 @@ using Trackit.Core.Ports;
 
 namespace Trackit.Core.Services
 {
+    // Manages enabling and disabling TOTP-based 2FA for users.
     public sealed class UserTwoFactorManager
     {
+        // User repository for data access.
         private readonly IUserRepository _repo;
 
+        // Constructor injecting the user repository.
         public UserTwoFactorManager(IUserRepository repo)
         {
             _repo = repo;
         }
 
-        // Persist after verification
+        // Persist after verification.
         public async Task EnableAsync(int userId, string base32Secret, CancellationToken ct = default)
         {
             var user = await _repo.GetByIdAsync(userId, ct) ?? throw new InvalidOperationException("User not found");

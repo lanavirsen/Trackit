@@ -48,6 +48,8 @@ namespace Trackit.Data.Repositories
                              VALUES(@Username, @Email, @PasswordHash, @PasswordSalt, @CreatedAtUtc, @TotpSecret, @TwoFactorEnabled);
                              SELECT last_insert_rowid();";
             using var conn = _factory.Create();
+
+            // Attempt to insert the new user and retrieve the generated Id.
             try
             {
                 var id = await conn.ExecuteScalarAsync<long>(sql, new
@@ -68,6 +70,7 @@ namespace Trackit.Data.Repositories
             }
         }
 
+        // Asynchronously updates an existing User in the database.
         public async Task UpdateAsync(User user, CancellationToken ct = default)
         {
             const string sql = @"
@@ -114,6 +117,7 @@ namespace Trackit.Data.Repositories
             };
         }
 
+        // Asynchronously retrieves a User by their unique identifier.
         public async Task<User?> GetByIdAsync(int id, CancellationToken ct = default)
         {
             const string sql = @"SELECT Id, Username, Email, PasswordHash, PasswordSalt, CreatedAtUtc,

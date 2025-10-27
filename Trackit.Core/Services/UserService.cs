@@ -32,6 +32,7 @@ namespace Trackit.Core.Services
 
         // CancellationToken is a .NET mechanism that allows cooperative cancellation of asynchronous operations.
 
+        // Register a new user with the given username, email, and password.
         public async Task<int> RegisterAsync(string username, string? email, string password, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username required", nameof(username));
@@ -56,6 +57,7 @@ namespace Trackit.Core.Services
             return await _repo.AddAsync(user, ct);
         }
 
+        // Check if a username already exists in the system.
         public async Task<bool> UsernameExistsAsync(string username, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(username)) throw new ArgumentException("Username required", nameof(username));
@@ -63,6 +65,7 @@ namespace Trackit.Core.Services
             return await _repo.ExistsAsync(norm, ct);
         }
 
+        // Attempt to log in with the given username and password.
         public async Task<LoginResult> LoginAsync(string username, string password, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(username) || string.IsNullOrEmpty(password))

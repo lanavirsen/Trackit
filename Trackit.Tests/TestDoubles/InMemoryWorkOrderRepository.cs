@@ -15,6 +15,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
     private readonly object _gate = new();
     private int _nextId;
 
+    // AddAsync adds a new work order to the repository and returns the assigned work order ID.
     public Task<int> AddAsync(WorkOrder wo, CancellationToken ct = default)
     {
         lock (_gate)
@@ -25,6 +26,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         }
     }
 
+    // GetAsync retrieves a work order by its ID.
     public Task<WorkOrder?> GetAsync(int id, CancellationToken ct = default)
     {
         lock (_gate)
@@ -33,6 +35,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         }
     }
 
+    // ListOpenAsync lists all open work orders for a given creator user ID.
     public Task<IReadOnlyList<WorkOrder>> ListOpenAsync(int creatorUserId, CancellationToken ct = default)
     {
         lock (_gate)
@@ -48,6 +51,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         }
     }
 
+    // UpdateAsync updates an existing work order in the repository.
     public Task UpdateAsync(WorkOrder wo, CancellationToken ct = default)
     {
         lock (_gate)
@@ -61,6 +65,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         return Task.CompletedTask;
     }
 
+    // ListDueSoonAsync lists work orders that are due soon and have not yet been notified for the specified window tag.
     public Task<IReadOnlyList<DueSoonItem>> ListDueSoonAsync(int userId, DateTimeOffset nowUtc, DateTimeOffset untilUtc, string windowTag, CancellationToken ct = default)
     {
         lock (_gate)
@@ -80,6 +85,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         }
     }
 
+    // AddNotificationLogAsync records that a notification has been sent for a work order and window tag.
     public Task AddNotificationLogAsync(int workOrderId, string windowTag, DateTimeOffset sentAtUtc, CancellationToken ct = default)
     {
         lock (_gate)
@@ -90,6 +96,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         return Task.CompletedTask;
     }
 
+    // ListByUserAsync lists all work orders for a given creator user ID.
     public Task<IReadOnlyList<WorkOrder>> ListByUserAsync(int creatorUserId, CancellationToken ct = default)
     {
         lock (_gate)
@@ -106,5 +113,7 @@ public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
         }
     }
 
+    // Copy creates a shallow copy of the given work order.
+    // This ensures that modifications to the returned work order do not affect the stored version.
     private static WorkOrder Copy(WorkOrder source) => source with { };
 }

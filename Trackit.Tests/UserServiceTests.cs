@@ -9,6 +9,7 @@ namespace Trackit.Tests
 {
     public class UserServiceTests
     {
+        // Factory method to create a new UserService with its dependencies.
         private static UserService NewSvc() =>
             new(new InMemoryUserRepository(), new PasswordHasher(), () => new System.DateTimeOffset(2025, 10, 10, 0, 0, 0, System.TimeSpan.Zero));
 

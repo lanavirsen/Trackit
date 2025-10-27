@@ -11,17 +11,21 @@ namespace Trackit.Core.Services
         private readonly Func<DateTimeOffset> _nowUtc;
         private readonly INotificationService? _notifications;
 
+        // Validation constants.
         private const int SummaryMax = 200;
         private const int DetailsMax = 4000;
 
+        // Normalizes input strings by trimming whitespace and converting null/whitespace to an empty string.
         private static string Norm(string? s) => string.IsNullOrWhiteSpace(s) ? "" : s.Trim();
 
+        // Validates the summary length.
         private static void ValidateSummary(string summary)
         {
             if (summary.Length is < 1 or > SummaryMax)
                 throw new ArgumentException($"Summary must be 1..{SummaryMax} characters.");
         }
 
+        // Validates the details length.
         private static void ValidateDetails(string? details)
         {
             if (details is { Length: > DetailsMax })
@@ -50,17 +54,19 @@ namespace Trackit.Core.Services
         // Adds a new work order and returns the generated database ID.
         public async Task<int> AddAsync(int creatorUserId, string summary, string? details, DateTimeOffset dueAtUtc, Priority? priority = null, bool allowPastDue = false, CancellationToken ct = default)
         {
-            // normalize & validate
+            // Normalize and validate inputs.
             summary = Norm(summary);
             details = Norm(details) is "" ? null : Norm(details);
             ValidateSummary(summary);
             ValidateDetails(details);
 
+            // Validate due date.
             var now = _nowUtc();
             var dueUtc = dueAtUtc.ToUniversalTime();
             if (!allowPastDue && dueUtc < now)
                 throw new InvalidOperationException("Due cannot be in the past.");
 
+            // Create and persist the work order.
             var wo = new WorkOrder
             {
                 CreatorUserId = creatorUserId,
@@ -86,6 +92,7 @@ namespace Trackit.Core.Services
         public Task<WorkOrder?> GetByIdAsync(int id, CancellationToken ct = default)
             => _repo.GetAsync(id, ct);
 
+        // Closes a work order with a specified reason.
         public async Task CloseAsync(int id, int actorUserId, CloseReason reason, CancellationToken ct = default)
         {
             var existing = await _repo.GetAsync(id, ct) ?? throw new InvalidOperationException("Work order not found.");
@@ -115,13 +122,13 @@ namespace Trackit.Core.Services
             var updated = existing with
             {
                 Stage = newStage,
-                // keep Closed flags consistent
                 Closed = newStage == Stage.Closed || existing.Closed,
                 ClosedAtUtc = newStage == Stage.Closed && existing.ClosedAtUtc is null ? now : existing.ClosedAtUtc,
                 UpdatedAtUtc = now
             };
             await _repo.UpdateAsync(updated, ct);
         }
+
         // Idempotent due-soon notifications using NotificationLog and INotificationService.
         public async Task<IReadOnlyList<DueSoonItem>> SendDueNotificationsAsync(int userId, string toEmail, TimeSpan window, CancellationToken ct = default)
         {

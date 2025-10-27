@@ -34,9 +34,11 @@ public sealed class InMemoryUserRepository : IUserRepository
         return Task.FromResult(user);
     }
 
+    // ExistsAsync checks if a user with the given username exists in the repository.
     public Task<bool> ExistsAsync(string normalizedUsername, CancellationToken ct = default)
         => Task.FromResult(_byUsername.ContainsKey(normalizedUsername));
 
+    // AddAsync adds a new user to the repository and returns the assigned user ID.
     public Task<int> AddAsync(User user, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(user.Username))
@@ -66,6 +68,7 @@ public sealed class InMemoryUserRepository : IUserRepository
         }
     }
 
+    // GetByIdAsync retrieves a user by their ID.
     public Task<User?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         _byId.TryGetValue(id, out var user);
@@ -78,11 +81,14 @@ public sealed class InMemoryUserRepository : IUserRepository
     {
         if (user.Id <= 0) throw new ArgumentException("Valid Id required", nameof(user));
 
+        // Locking ensures that the code inside the block is executed by only one thread at a time.
         lock (_gate)
         {
+            // Check if the user exists.
             if (!_byId.TryGetValue(user.Id, out var existing))
                 throw new InvalidOperationException("User not found");
 
+            // If the username is being changed, ensure the new username is not already taken.
             if (!string.Equals(existing.Username, user.Username, StringComparison.Ordinal))
             {
                 if (_byUsername.TryGetValue(user.Username, out var other) && other.Id != user.Id)
@@ -91,8 +97,10 @@ public sealed class InMemoryUserRepository : IUserRepository
                 _byUsername.TryRemove(existing.Username, out _);
             }
 
+            // Create a clone of the user to store, preserving the original ID and creation timestamp.
             var stored = Clone(user, existing.Id, existing.CreatedAtUtc);
 
+            // Update the dictionaries with the new user data.
             _byId[stored.Id] = stored;
             _byUsername[stored.Username] = stored;
         }

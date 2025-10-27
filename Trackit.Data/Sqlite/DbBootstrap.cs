@@ -33,18 +33,21 @@ namespace Trackit.Data.Sqlite
             if (!await ColumnExistsAsync(conn, "WorkOrders", "Stage"))
                 await ExecEmbedded("003_stage.sql");
 
-            // --- Add missing TOTP columns safely ---
+            // Check if the "TotpSecret" column exists in the "Users" table; if not, add it.
             if (!await ColumnExistsAsync(conn, "Users", "TotpSecret"))
             {
                 using var cmd = new SqliteCommand("ALTER TABLE Users ADD COLUMN TotpSecret TEXT;", conn);
                 await cmd.ExecuteNonQueryAsync();
             }
+
+            // Check and add "TwoFactorEnabled" column if it doesn't exist.
             if (!await ColumnExistsAsync(conn, "Users", "TwoFactorEnabled"))
             {
                 using var cmd = new SqliteCommand("ALTER TABLE Users ADD COLUMN TwoFactorEnabled INTEGER DEFAULT 0;", conn);
                 await cmd.ExecuteNonQueryAsync();
             }
 
+            // Execute additional migration scripts for notifications and TOTP.
             await ExecEmbedded("004_notifications.sql");
             await ExecEmbedded("005_totp.sql");
         }
@@ -65,6 +68,9 @@ namespace Trackit.Data.Sqlite
         // Checks if a specific column exists in a given table within the SQLite database.
         private static async Task<bool> ColumnExistsAsync(SqliteConnection conn, string table, string column)
         {
+            // PRAGMA table_info returns one row for each column in the named table.
+            // PRAGMA is a special command in SQLite used to modify the operation of the database engine
+            // or to query the database for internal (non-table) data.
             using var cmd = new SqliteCommand($"PRAGMA table_info('{table}')", conn);
             using var reader = await cmd.ExecuteReaderAsync();
             while (await reader.ReadAsync())

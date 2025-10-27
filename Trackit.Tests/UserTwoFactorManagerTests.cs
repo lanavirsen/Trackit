@@ -13,7 +13,7 @@ public class UserTwoFactorManagerTests
         var totp = new TotpService();
         var manager = new UserTwoFactorManager(repo);
 
-        // Create a user manually
+        // Create a user manually.
         var user = new User
         {
             Username = "lana",
@@ -24,7 +24,7 @@ public class UserTwoFactorManagerTests
         };
         var id = await repo.AddAsync(user);
 
-        // Enable TOTP
+        // Enable TOTP.
         var secret = totp.GenerateSecret();
         await manager.EnableAsync(id, secret);
         var updated = await repo.GetByIdAsync(id);
@@ -33,7 +33,7 @@ public class UserTwoFactorManagerTests
         Assert.True(updated!.TwoFactorEnabled);
         Assert.Equal(secret, updated.TotpSecret);
 
-        // Disable TOTP
+        // Disable TOTP.
         await manager.DisableAsync(id);
         var disabled = await repo.GetByIdAsync(id);
 
