@@ -3,6 +3,7 @@ using Spectre.Console;
 using Trackit.Core.Domain;
 using Trackit.Core.Services;
 
+// CLI stands for Command-Line Interface.
 namespace Trackit.Cli.Ui
 {
     // Command-line user interface shell for the Trackit application.
@@ -18,6 +19,8 @@ namespace Trackit.Cli.Ui
         private bool _twoFactorEnabled;
 
         // Constructor accepting user and work order services.
+        // It exists so the UiShell class can receive the components it depends on —
+        // it’s how dependency injection (manual in this case) is done.
         public UiShell(UserService users, WorkOrderService work, UserTwoFactorManager tfa, TotpService totp)
         {
             _users = users;
@@ -29,10 +32,13 @@ namespace Trackit.Cli.Ui
         // Main loop to run the CLI application.
         public async Task RunAsync()
         {
+            // while (true) creates an infinite loop — it keeps running over and over
+            // until something inside the loop explicitly stops it.
             while (true)
             {
                 RenderHeader();
 
+                // Build menu dynamically depending on login state.
                 var choices = _currentUserId is null
                     ? new[] { "Register", "Login", "Exit" }
                     : new[] { "Workspace", "Logout" };
@@ -47,7 +53,7 @@ namespace Trackit.Cli.Ui
                     case "Register": await RegisterAsync(); break;
                     case "Login":
                         if (await LoginAsync())
-                            await WorkspaceLoopAsync(); // auto-list + actions
+                            await WorkspaceLoopAsync(); // enter workspace if login successful.
                         break;
                     case "Workspace": await WorkspaceLoopAsync(); break;
                     case "Logout": _currentUserId = null; _currentUsername = null; break;
@@ -103,7 +109,7 @@ namespace Trackit.Cli.Ui
             }
 
             var user = res.User!;
-            // Require TOTP only if enabled and a secret exists
+            // Require TOTP only if enabled and a secret exists.
             if (user.TwoFactorEnabled && !string.IsNullOrWhiteSpace(user.TotpSecret))
             {
                 var code = AnsiConsole.Prompt(new TextPrompt<string>("Enter 6-digit TOTP code:").Secret());
@@ -116,7 +122,7 @@ namespace Trackit.Cli.Ui
                 }
             }
 
-            // Set session only after all checks pass
+            // Set session only after all checks pass.
             _currentUserId = user.Id;
             _currentUsername = user.Username;
             _currentUserEmail = user.Email;
@@ -127,16 +133,17 @@ namespace Trackit.Cli.Ui
             return true;
         }
 
+        // Main workspace loop after login.
         private async Task WorkspaceLoopAsync()
         {
             while (_currentUserId is not null)
             {
                 RenderHeader();
 
-                // Render current open items
+                // Render current open items.
                 await ListOpenAsync(renderOnly: true);
 
-                // --- Build menu dynamically depending on 2FA state ---
+                // Build menu dynamically depending on 2FA state.
                 var choices = new List<string>
                 {
                     "Add work order",
@@ -153,7 +160,7 @@ namespace Trackit.Cli.Ui
 
                 choices.Add("Logout");
 
-                // Display menu
+                // Prompt for action.
                 var action = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
                         .Title("[bold cyan]Choose an action[/]:")
@@ -174,7 +181,7 @@ namespace Trackit.Cli.Ui
                         break;
 
                     case "Refresh":
-                        // no-op; next loop iteration re-renders
+                        // No action needed; loop will re-render.
                         break;
 
                     case "Due check (24h)":
@@ -195,18 +202,20 @@ namespace Trackit.Cli.Ui
                         _currentUserId = null;
                         _currentUsername = null;
                         _currentUserEmail = null;
-                        return; // exit workspace back to main menu
+                        return; // exit workspace back to main menu.
                 }
-                // loop continues; screen will clear and re-render list + actions
             }
         }
 
         // Add a new work order by prompting for details.
         private async Task AddWorkOrderAsync()
         {
+            // Guard: must be logged in.
             if (!RequireLogin()) return;
 
             PrintCancelHint();
+
+            // Prompt for summary.
             var summary = AnsiConsole.Prompt(
                 new TextPrompt<string>("Summary:").AllowEmpty());
             if (string.IsNullOrWhiteSpace(summary)) { AnsiConsole.MarkupLine("[grey]Cancelled.[/]"); return; }
@@ -224,6 +233,7 @@ namespace Trackit.Cli.Ui
                 return;
             }
 
+            // Determine due date/time.
             DateTimeOffset dueUtc;
             if (preset == "Today 18:00")
                 dueUtc = DateTimeOffset.Now.Date.AddHours(18).ToUniversalTime();
@@ -245,6 +255,7 @@ namespace Trackit.Cli.Ui
                 }
             }
 
+            // Suggest priority based on due date.
             var suggested = _work.SuggestPriority(dueUtc);
             var chosen = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
@@ -265,8 +276,10 @@ namespace Trackit.Cli.Ui
                 _ => suggested
             };
 
+            // Attempt to save the new work order.
             await AnsiConsole.Status().StartAsync("Saving...", async _ =>
             {
+                // Try to add the work order, handling past-due cases.
                 try
                 {
                     await _work.AddAsync(
@@ -307,6 +320,7 @@ namespace Trackit.Cli.Ui
             });
         }
 
+        // Format a TimeSpan into a relative string (e.g., "2d 3h", "5h 30m", "45m").
         private static string FormatRelative(TimeSpan span)
         {
             if (span.TotalDays >= 1)
@@ -383,6 +397,8 @@ namespace Trackit.Cli.Ui
             if (!RequireLogin()) return;
 
             PrintCancelHint();
+
+            // Prompt for work order ID.
             var idStr = AnsiConsole.Prompt(
                 new TextPrompt<string>("Work order Id:").AllowEmpty());
             if (string.IsNullOrWhiteSpace(idStr))
@@ -398,7 +414,7 @@ namespace Trackit.Cli.Ui
                 return;
             }
 
-            // check existence early
+            // Fetch existing work order.
             var existing = await _work.GetByIdAsync(id);
                 if (existing is null)
                 {
@@ -407,15 +423,16 @@ namespace Trackit.Cli.Ui
                     return;
                 }
 
-            // --- clear screen, show header, and re-render the current list ---
+            // Clear screen, show header, and re-render the current list.
             RenderHeader();
 
-            // show the open items so user has context while choosing the new stage
+            // Show the open items so user has context while choosing the new stage.
             await ListOpenAsync(renderOnly: true);
 
             AnsiConsole.MarkupLine($"[bold]Change stage for work order [yellow]{id}[/][/]");
             AnsiConsole.WriteLine();
 
+            // Prompt for new stage.
             var newStageStr = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title("Select new stage")
@@ -440,6 +457,7 @@ namespace Trackit.Cli.Ui
             {
                 if (newStage == Stage.Closed)
                 {
+                    // Confirm closure.
                     var confirm = AnsiConsole.Confirm("Are you sure you want to close this work order?");
                     if (!confirm)
                     {
@@ -465,8 +483,10 @@ namespace Trackit.Cli.Ui
             }
         }
 
+        // Run due check and send email notifications for items due within 24 hours.
         private async Task RunDueCheckAsync()
         {
+            // Guard: must be logged in.
             if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return; }
             if (string.IsNullOrWhiteSpace(_currentUserEmail))
             {
@@ -476,6 +496,7 @@ namespace Trackit.Cli.Ui
 
             try
             {
+                // Run due check and send notifications.
                 IReadOnlyList<DueSoonItem> sentItems = Array.Empty<DueSoonItem>();
                 await AnsiConsole.Status()
                     .StartAsync("Checking due items and sending emails...", async _ =>
@@ -485,6 +506,7 @@ namespace Trackit.Cli.Ui
 
                 RenderHeader();
 
+                // Display results.
                 if (sentItems.Count == 0)
                 {
                     var ts = DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm");
@@ -527,16 +549,20 @@ namespace Trackit.Cli.Ui
                 AnsiConsole.MarkupLine("[grey]Press any key to return...[/]");
                 Console.ReadKey(intercept: true);
             }
+
+            // Handle email sending errors.
             catch (HttpRequestException ex)
             {
                 AnsiConsole.MarkupLine($"[red]Email provider error:[/] {Markup.Escape(ex.Message)}");
             }
         }
 
+        // Enable TOTP-based two-factor authentication.
         private async Task<bool> EnableTotpAsync()
         {
             if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return false; }
 
+            // Generate TOTP secret and URI.
             var secret = _totp.GenerateSecret();
             var uri = _totp.BuildUri("Trackit", _currentUsername ?? $"user{_currentUserId}", secret);
 
@@ -544,6 +570,7 @@ namespace Trackit.Cli.Ui
             AnsiConsole.MarkupLine($"[yellow]URI:[/] {uri}");
             AnsiConsole.MarkupLine("[grey]Scan in your authenticator. Enter code to confirm, or press Enter to cancel.[/]");
 
+            // Prompt for TOTP code and verify.
             while (true)
             {
                 var code = AnsiConsole.Prompt(
@@ -576,6 +603,7 @@ namespace Trackit.Cli.Ui
             }
         }
 
+        // Disable TOTP-based two-factor authentication.
         private async Task DisableTotpAsync()
         {
             if (_currentUserId is null)
@@ -584,6 +612,7 @@ namespace Trackit.Cli.Ui
                 return;
             }
 
+            // Confirm disabling 2FA.
             var confirm = AnsiConsole.Confirm("Are you sure you want to disable two-factor authentication?");
             if (!confirm)
             {
@@ -592,6 +621,7 @@ namespace Trackit.Cli.Ui
                 return;
             }
 
+            // Attempt to disable 2FA.
             try
             {
                 await _tfa.DisableAsync(_currentUserId.Value);
@@ -603,10 +633,11 @@ namespace Trackit.Cli.Ui
                 AnsiConsole.MarkupLine($"[red]Failed to disable 2FA:[/] {Markup.Escape(ex.Message)}");
             }
 
+            // Update session state.
             _twoFactorEnabled = false;
         }
 
-
+        // Show a report of work order statistics.
         private async Task ShowReportAsync()
         {
             if (!RequireLogin()) return;

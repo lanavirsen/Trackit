@@ -7,9 +7,7 @@ using Trackit.Core.Ports;
 
 namespace Trackit.Tests.TestDoubles;
 
-/// <summary>
-/// In-memory <see cref="IWorkOrderRepository"/> used exclusively by tests.
-/// </summary>
+// In-memory work order repository for testing purposes.
 public sealed class InMemoryWorkOrderRepository : IWorkOrderRepository
 {
     private readonly Dictionary<int, WorkOrder> _byId = new();

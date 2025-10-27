@@ -7,16 +7,27 @@ using Trackit.Core.Ports;
 
 namespace Trackit.Tests.TestDoubles;
 
-/// <summary>
-/// Lightweight in-memory implementation of <see cref="IUserRepository"/> for unit tests.
-/// </summary>
+// In-memory user repository for testing purposes.
+// Each test sets up its own repository and populates it manually before calling the code being tested.
+
+// When class is sealed, it means no other class can inherit from it.
 public sealed class InMemoryUserRepository : IUserRepository
 {
+    // ConcurrentDictionary is a thread-safe collection for storing users by username and by ID.
+    // Thread-safe means it can be safely accessed by multiple threads at the same time.
     private readonly ConcurrentDictionary<string, User> _byUsername = new();
     private readonly ConcurrentDictionary<int, User> _byId = new();
+
+    // _gate is used to synchronize access to critical sections of code.
+    // It ensures that only one thread can access the code inside the lock at a time.
+    // It's just a private field — a plain object.
+    // It isn’t an instance of a special class; it’s literally a new, empty object used only as a lock handle.
     private readonly object _gate = new();
+
     private int _nextId;
 
+
+    // Task is a representation of an asynchronous operation.
     public Task<User?> GetByUsernameAsync(string normalizedUsername, CancellationToken ct = default)
     {
         _byUsername.TryGetValue(normalizedUsername, out var user);
@@ -33,6 +44,14 @@ public sealed class InMemoryUserRepository : IUserRepository
         if (user.PasswordHash is null || user.PasswordSalt is null)
             throw new ArgumentException("Password not hashed", nameof(user));
 
+        // Locking ensures that the code inside the block is executed by only one thread at a time.
+
+        /*
+        If multiple threads tried to add users to _byUsername or _byId at the same time, we could get:
+          - race conditions (two threads using the same ID)
+          - inconsistent state (half-written data)
+          - exceptions like “key already exists” or corrupted structures.
+        */
         lock (_gate)
         {
             if (_byUsername.ContainsKey(user.Username))
@@ -53,6 +72,8 @@ public sealed class InMemoryUserRepository : IUserRepository
         return Task.FromResult(user);
     }
 
+    // UpdateAsync updates an existing user in the repository.
+    // It just signals completion — nothing is awaited, and no value is returned.
     public Task UpdateAsync(User user, CancellationToken ct = default)
     {
         if (user.Id <= 0) throw new ArgumentException("Valid Id required", nameof(user));
@@ -78,6 +99,8 @@ public sealed class InMemoryUserRepository : IUserRepository
 
         return Task.CompletedTask;
     }
+
+    // Clone creates a copy of the user with a new ID and creation timestamp.
     private static User Clone(User user, int id, DateTimeOffset createdAt)
         => new()
         {

@@ -3,6 +3,15 @@ using System.Text.RegularExpressions;
 
 namespace Trackit.Cli.Ui
 {
+    /*
+    DueParser.cs lives in Trackit.Cli/Ui because its job is user-input parsing, not business logic.
+
+    DueParser converts text the user types in the console into a DateTimeOffset value (DueAtUtc).
+    That’s UI-layer logic.
+
+    The Core layer shouldn’t care how a due date is entered — only that it receives a valid UTC timestamp.
+    */
+
     public static class DueParser
     {
         // Try to parse relaxed user input into UTC
@@ -95,6 +104,7 @@ namespace Trackit.Cli.Ui
             return false;
         }
 
+        // Hint is a static property (a read-only string) in DueParser.
         public static string Hint =>
             "Examples: '2025-10-12 18:00', '14:30', 'today 19:00', 'tomorrow 09:00', '+2h', 'in 90m', 'now'.";
     }
