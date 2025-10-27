@@ -486,8 +486,7 @@ namespace Trackit.Cli.Ui
         // Run due check and send email notifications for items due within 24 hours.
         private async Task RunDueCheckAsync()
         {
-            // Guard: must be logged in.
-            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return; }
+            if (!RequireLogin()) return;
             if (string.IsNullOrWhiteSpace(_currentUserEmail))
             {
                 AnsiConsole.MarkupLine("[red]Your account has no email. Cannot send notifications.[/]");
@@ -560,7 +559,7 @@ namespace Trackit.Cli.Ui
         // Enable TOTP-based two-factor authentication.
         private async Task<bool> EnableTotpAsync()
         {
-            if (_currentUserId is null) { AnsiConsole.MarkupLine("[red]Login first.[/]"); return false; }
+            if (!RequireLogin()) return false;
 
             // Generate TOTP secret and URI.
             var secret = _totp.GenerateSecret();
@@ -606,11 +605,7 @@ namespace Trackit.Cli.Ui
         // Disable TOTP-based two-factor authentication.
         private async Task DisableTotpAsync()
         {
-            if (_currentUserId is null)
-            {
-                AnsiConsole.MarkupLine("[red]Login first.[/]");
-                return;
-            }
+            if (!RequireLogin()) return;
 
             // Confirm disabling 2FA.
             var confirm = AnsiConsole.Confirm("Are you sure you want to disable two-factor authentication?");
